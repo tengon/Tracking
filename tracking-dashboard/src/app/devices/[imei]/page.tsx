@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Topbar from '@/components/layout/Topbar'
 import { useAuthStore } from '@/lib/store/authStore'
 import type { Device, DeviceLocation } from '@/lib/api/types'
-import { mockDevices, mockLocations } from '@/lib/api/mockData'
+
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 
@@ -45,25 +45,13 @@ export default function DeviceDetailPage() {
 
         if (devJson.success && devJson.data) {
           setDevice(devJson.data)
-        } else {
-          // Fallback to mock
-          const mockD = mockDevices.find(d => d.imei === imei)
-          if (mockD) setDevice(mockD)
         }
 
         if (locJson.success && locJson.data?.[0]) {
           setLocation(locJson.data[0])
-        } else {
-          // Fallback to mock
-          const mockL = mockLocations.find(l => l.imei === imei)
-          if (mockL) setLocation(mockL)
         }
       } catch (e) {
-        // Fallback
-        const mockD = mockDevices.find(d => d.imei === imei)
-        const mockL = mockLocations.find(l => l.imei === imei)
-        if (mockD) setDevice(mockD)
-        if (mockL) setLocation(mockL)
+        console.error('Failed to load device data:', e)
       } finally {
         setLoading(false)
       }

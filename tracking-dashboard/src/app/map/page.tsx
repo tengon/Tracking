@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import { useAuthStore } from '@/lib/store/authStore'
 import type { DeviceLocation } from '@/lib/api/types'
-import { mockLocations } from '@/lib/api/mockData'
+
 
 // Leaflet must be loaded client-side only
 const LiveMapComponent = dynamic(() => import('@/components/map/LiveMap'), { ssr: false, loading: () => (
@@ -23,7 +23,7 @@ export default function MapPage() {
   const [filter, setFilter] = useState<'all' | 'online' | 'offline'>('all')
   const [search, setSearch] = useState('')
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
-  const [isDemo, setIsDemo] = useState(false)
+
 
   const fetchLocations = useCallback(async () => {
     if (!accessToken || !account) return
@@ -36,18 +36,11 @@ export default function MapPage() {
       })
       const json = await res.json()
       if (json.success && Array.isArray(json.data)) {
-        if (json.data.length === 0) {
-          setDevices(mockLocations)
-          setIsDemo(true)
-        } else {
-          setDevices(json.data)
-          setIsDemo(false)
-        }
+        setDevices(json.data)
         setLastUpdate(new Date())
       }
-    } catch {
-      setDevices(mockLocations)
-      setIsDemo(true)
+    } catch (e) {
+      console.error('Failed to fetch locations:', e)
     }
   }, [accessToken, account, contextAccount])
 
@@ -134,10 +127,7 @@ export default function MapPage() {
           </div>
 
           <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div>{filtered.length} of {devices.length} devices · auto-refresh 30s</div>
-            {isDemo && (
-              <div style={{ color: 'var(--amber)', fontWeight: 600 }}>⚠️ Showing Demo Fleet Data</div>
-            )}
+          <div>{filtered.length} of {devices.length} devices · auto-refresh 30s</div>
           </div>
         </div>
       </div>

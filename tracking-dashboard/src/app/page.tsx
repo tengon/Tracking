@@ -4,7 +4,7 @@ import Topbar from '@/components/layout/Topbar'
 import { useAuthStore } from '@/lib/store/authStore'
 import type { DeviceLocation } from '@/lib/api/types'
 
-import { mockLocations } from '@/lib/api/mockData'
+
 
 function StatCard({ icon, label, value, accent, delta }: {
   icon: string; label: string; value: string | number; accent: string; delta?: string
@@ -26,7 +26,7 @@ function StatCard({ icon, label, value, accent, delta }: {
 export default function DashboardPage() {
   const { accessToken, account, contextAccount } = useAuthStore()
   const [locations, setLocations] = useState<DeviceLocation[]>([])
-  const [isDemo, setIsDemo] = useState(false)
+
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
@@ -43,18 +43,11 @@ export default function DashboardPage() {
       })
       const json = await res.json()
       if (json.success && Array.isArray(json.data)) {
-        if (json.data.length === 0) {
-          setLocations(mockLocations)
-          setIsDemo(true)
-        } else {
-          setLocations(json.data)
-          setIsDemo(false)
-        }
+        setLocations(json.data)
         setLastUpdate(new Date())
       }
     } catch (e) {
-      setLocations(mockLocations)
-      setIsDemo(true)
+      console.error('Failed to fetch locations:', e)
     }
     finally { setLoading(false) }
   }
@@ -90,11 +83,6 @@ export default function DashboardPage() {
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             Fleet overview for account <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>{account}</span>
-            {isDemo && (
-              <span className="badge badge-alarm" style={{ background: 'rgba(251,191,36,0.1)', color: 'var(--amber)', border: '1px solid rgba(251,191,36,0.3)', padding: '2px 8px', fontSize: 11 }}>
-                ⚠️ Demo Mode (Account has no active devices)
-              </span>
-            )}
           </p>
         </div>
 

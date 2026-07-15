@@ -13,7 +13,7 @@ const GeofenceMap = dynamic(() => import('@/components/map/GeofenceMap'), {
   )
 })
 
-import { mockGeofences } from '@/lib/api/mockData'
+
 
 export default function GeofencesPage() {
   const { accessToken, account } = useAuthStore()
@@ -22,7 +22,7 @@ export default function GeofencesPage() {
   const [selected, setSelected] = useState<Geofence | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [newFence, setNewFence] = useState({ name: '', type: 'circle', coordinates: '', radius: '500', alertType: 'both' })
-  const [isDemo, setIsDemo] = useState(false)
+
 
   const loadFences = useCallback(async () => {
     if (!accessToken || !account) return
@@ -34,16 +34,14 @@ export default function GeofencesPage() {
         body: JSON.stringify({ accessToken, account }),
       })
       const json = await res.json()
-      if (json.success && Array.isArray(json.data?.rows) && json.data.rows.length > 0) {
+      if (json.success && Array.isArray(json.data?.rows)) {
         setGeofences(json.data.rows)
-        setIsDemo(false)
       } else {
-        setGeofences(mockGeofences)
-        setIsDemo(true)
+        setGeofences([])
       }
-    } catch {
-      setGeofences(mockGeofences)
-      setIsDemo(true)
+    } catch (e) {
+      console.error('Failed to fetch geofences:', e)
+      setGeofences([])
     } finally {
       setLoading(false)
     }
@@ -103,11 +101,6 @@ export default function GeofencesPage() {
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h1 className="page-title" style={{ margin: 0 }}>🗺️ Geofence Manager</h1>
-          {isDemo && (
-            <span className="badge badge-alarm" style={{ background: 'rgba(251,191,36,0.1)', color: 'var(--amber)', border: '1px solid rgba(251,191,36,0.3)', padding: '4px 10px' }}>
-              ⚠️ Demo Mode
-            </span>
-          )}
         </div>
         <div className="page-actions">
           <button className="btn btn-secondary" onClick={loadFences}>↻ Load Fences</button>

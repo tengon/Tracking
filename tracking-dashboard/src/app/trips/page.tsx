@@ -15,7 +15,7 @@ const TrackMap = dynamic(() => import('@/components/map/TrackMap'), {
   )
 })
 
-import { mockTrackPoints, mockTrips } from '@/lib/api/mockData'
+
 
 function formatDuration(secs: number) {
   const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60)
@@ -35,7 +35,7 @@ export default function TripsPage() {
   const [selectedTrip, setSelectedTrip] = useState<MileageTrip | null>(null)
   const [loading, setLoading] = useState(false)
   const [totalMileage, setTotalMileage] = useState(0)
-  const [isDemo, setIsDemo] = useState(false)
+
 
   const toUtc = (local: string) => {
     const d = new Date(local); d.setHours(d.getHours() - 7)
@@ -45,7 +45,6 @@ export default function TripsPage() {
   const search = useCallback(async () => {
     if (!imei || !accessToken) return
     setLoading(true)
-    setIsDemo(false)
     try {
       const [mileageRes, trackRes] = await Promise.all([
         fetch('/api/tracks', {
@@ -73,17 +72,18 @@ export default function TripsPage() {
         gotPoints = true
       }
 
-      if (!gotTrips || !gotPoints) {
-        setTrips(mockTrips)
-        setTrackPoints(mockTrackPoints)
-        setTotalMileage(mockTrips[0].distance / 1000)
-        setIsDemo(true)
+      if (!gotTrips) {
+        setTrips([])
+        setTotalMileage(0)
       }
-    } catch {
-      setTrips(mockTrips)
-      setTrackPoints(mockTrackPoints)
-      setTotalMileage(mockTrips[0].distance / 1000)
-      setIsDemo(true)
+      if (!gotPoints) {
+        setTrackPoints([])
+      }
+    } catch (e) {
+      console.error('Failed to fetch trip data:', e)
+      setTrips([])
+      setTrackPoints([])
+      setTotalMileage(0)
     } finally {
       setLoading(false)
     }
@@ -92,14 +92,7 @@ export default function TripsPage() {
   return (
     <>
       <Topbar title="Trip History & Playback" subtitle="View historical routes and mileage" />
-      {/*<div className="page-header" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <h1 className="page-title" style={{ margin: 0 }}>📜 Trip History & Playback</h1>
-        {isDemo && (
-          <span className="badge badge-alarm" style={{ background: 'rgba(251,191,36,0.1)', color: 'var(--amber)', border: '1px solid rgba(251,191,36,0.3)', padding: '4px 10px' }}>
-            ⚠️ Demo Mode
-          </span>
-        )}
-      </div>*/}
+
 
       {/* Search Bar */}
       < div className="card" style={{ marginBottom: 20, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>

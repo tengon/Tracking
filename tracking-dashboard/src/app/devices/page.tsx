@@ -6,7 +6,7 @@ import type { Device } from '@/lib/api/types'
 import type { SubAccount } from '@/lib/api/tracksolid'
 import Link from 'next/link'
 
-import { mockDevices } from '@/lib/api/mockData'
+
 
 export default function DevicesPage() {
   const { accessToken, account, contextAccount } = useAuthStore()
@@ -14,7 +14,7 @@ export default function DevicesPage() {
   const [subAccounts, setSubAccounts] = useState<SubAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [isDemo, setIsDemo] = useState(false)
+
 
   // Assignment Modal State
   const [assignModal, setAssignModal] = useState<any>(null)
@@ -36,11 +36,9 @@ export default function DevicesPage() {
       let fetchedDevices = []
       
       if (json.success && Array.isArray(json.data)) {
-        fetchedDevices = json.data.length === 0 ? mockDevices : json.data
-        setIsDemo(json.data.length === 0)
+        fetchedDevices = json.data
       } else {
-        fetchedDevices = mockDevices
-        setIsDemo(true)
+        fetchedDevices = []
       }
 
       // Fetch local DB labels
@@ -71,9 +69,9 @@ export default function DevicesPage() {
       
       setDevices(fetchedDevices)
       
-    } catch {
-      setDevices(mockDevices)
-      setIsDemo(true)
+    } catch (e) {
+      console.error('Failed to fetch devices:', e)
+      setDevices([])
     } finally {
       setLoading(false)
     }
@@ -134,11 +132,6 @@ export default function DevicesPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <h1 className="page-title" style={{ margin: 0 }}>🚗 Device Management</h1>
-            {isDemo && (
-              <span className="badge badge-alarm" style={{ background: 'rgba(251,191,36,0.1)', color: 'var(--amber)', border: '1px solid rgba(251,191,36,0.3)', padding: '4px 10px' }}>
-                ⚠️ Demo Mode
-              </span>
-            )}
           </div>
           <p className="page-subtitle" style={{ marginTop: 4 }}>Kelola dan tetapkan perangkat GPS ke Sub-Account (Local DB)</p>
         </div>
