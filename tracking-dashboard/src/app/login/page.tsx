@@ -35,11 +35,24 @@ export default function LoginPage() {
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'var(--bg-base)', padding: 24, position: 'relative', overflow: 'hidden'
+      padding: 24, position: 'relative', overflow: 'hidden'
     }}>
-      {/* Background glow effects */}
-      <div style={{ position: 'absolute', top: '20%', left: '15%', width: 400, height: 400, background: 'rgba(0,212,255,0.06)', borderRadius: '50%', filter: 'blur(80px)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: '20%', right: '15%', width: 350, height: 350, background: 'rgba(123,97,255,0.07)', borderRadius: '50%', filter: 'blur(80px)', pointerEvents: 'none' }} />
+      {/* Full-screen background image */}
+      <div style={{
+        position: 'absolute', inset: 0, zIndex: 0,
+        backgroundImage: 'url(/images/login-background.png)',
+        backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat',
+      }} />
+
+      {/* Dark overlay for readability */}
+      <div style={{
+        position: 'absolute', inset: 0, zIndex: 0,
+        background: 'linear-gradient(135deg, rgba(10,14,26,0.55) 0%, rgba(10,14,26,0.35) 50%, rgba(10,14,26,0.55) 100%)',
+      }} />
+
+      {/* Subtle glow accents */}
+      <div style={{ position: 'absolute', top: '20%', left: '15%', width: 400, height: 400, background: 'rgba(0,212,255,0.08)', borderRadius: '50%', filter: 'blur(100px)', pointerEvents: 'none', zIndex: 0 }} />
+      <div style={{ position: 'absolute', bottom: '20%', right: '15%', width: 350, height: 350, background: 'rgba(123,97,255,0.1)', borderRadius: '50%', filter: 'blur(100px)', pointerEvents: 'none', zIndex: 0 }} />
 
       <div style={{ width: '100%', maxWidth: 420, position: 'relative', zIndex: 1 }}>
         {/* Logo */}
@@ -115,9 +128,9 @@ export default function LoginPage() {
 
         <p style={{ textAlign: 'center', marginTop: 24, fontSize: 12, color: 'var(--text-muted)' }}>
           Powered by{' '}
-          <a href="https://tracksolidprodocs.jimicloud.com" target="_blank" rel="noopener noreferrer"
+          <a href="https://bitautomation.id" target="_blank" rel="noopener noreferrer"
             style={{ color: 'var(--cyan)' }}>
-            JIMI IoT Open API
+            BiT Automation
           </a>
         </p>
       </div>

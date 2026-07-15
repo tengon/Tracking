@@ -33,7 +33,7 @@ export default function DevicesPage() {
         body: JSON.stringify({ accessToken, target: account }), // always fetch from parent
       })
       const json = await res.json()
-      let fetchedDevices = []
+      let fetchedDevices: any[] = []
       
       if (json.success && Array.isArray(json.data)) {
         fetchedDevices = json.data

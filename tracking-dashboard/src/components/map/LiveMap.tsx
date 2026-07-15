@@ -32,9 +32,12 @@ export default function LiveMap({ devices, selected, onSelect }: Props) {
       const map = L.map(containerRef.current, {
         center: [-2.5, 118.0],
         zoom: 5,
-        zoomControl: true,
+        zoomControl: false, // Disable default so we can place it custom
         attributionControl: true,
       })
+
+      // Add zoom control to top-right to avoid overlapping with sidebar toggle
+      L.control.zoom({ position: 'topright' }).addTo(map)
 
       // Standard OpenStreetMap tiles
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -44,10 +47,26 @@ export default function LiveMap({ devices, selected, onSelect }: Props) {
       }).addTo(map)
 
       mapRef.current = map
+
+      // Watch for container resizes (e.g. sidebar toggle) and invalidate map size
+      const resizeObserver = new ResizeObserver(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize()
+        }
+      })
+      resizeObserver.observe(containerRef.current)
+
+      // Store observer to clean up later
+      // @ts-expect-error - Attach to map object for cleanup
+      map.resizeObserver = resizeObserver
     })
 
     return () => {
-      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
+      if (mapRef.current) {
+        if (mapRef.current.resizeObserver) mapRef.current.resizeObserver.disconnect()
+        mapRef.current.remove()
+        mapRef.current = null
+      }
     }
   }, [])
 
@@ -118,20 +137,58 @@ export default function LiveMap({ devices, selected, onSelect }: Props) {
                 <div style="font-weight:700;color:${Number(device.batteryPowerVal) < 20 ? '#DC2626' : '#16A34A'}">${device.batteryPowerVal ? `${device.batteryPowerVal}%` : '—'}</div>
               </div>
             </div>
+            <!--ADDR_${device.imei}-->
             <div style="margin-top:10px;font-size:10px;color:#94A3B8">📅 ${device.gpsTime?.slice(0,16) || '—'}</div>
           </div>
         `
 
-        if (markersRef.current.has(device.imei)) {
-          const m = markersRef.current.get(device.imei)!
+        let m: any = markersRef.current.get(device.imei)
+        
+        if (m) {
           m.setLatLng([device.lat, device.lng])
           m.setIcon(icon)
-          m.getPopup()?.setContent(popup)
+          
+          // Preserve address if already fetched, else just update popup template
+          const existingPopup = m.getPopup()?.getContent() || ''
+          if (m._lastAddress && existingPopup.includes('📍')) {
+            const newPopup = popup.replace(`<!--ADDR_${device.imei}-->`, `<div style="font-size:10px;color:#334155;margin-top:8px;line-height:1.4;background:#F1F5F9;padding:6px;border-radius:4px">📍 ${m._lastAddress}</div>`)
+            m.getPopup()?.setContent(newPopup)
+          } else {
+            m.getPopup()?.setContent(popup)
+          }
         } else {
-          const m = L.marker([device.lat, device.lng], { icon })
+          m = L.marker([device.lat, device.lng], { icon })
             .addTo(map)
             .bindPopup(popup, { maxWidth: 280, className: 'fleet-popup' })
-          m.on('click', () => onSelect(device))
+            
+          m.on('click', () => {
+            onSelect(device)
+          })
+
+          m.on('popupopen', async () => {
+            // On-demand reverse geocoding via OpenStreetMap Nominatim
+            if (!m._addressFetched) {
+              try {
+                m.getPopup().setContent(popup.replace(`<!--ADDR_${device.imei}-->`, `<div style="font-size:10px;color:#64748B;margin-top:8px;line-height:1.4">📍 <i>Memuat alamat...</i></div>`))
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${device.lat}&lon=${device.lng}`)
+                const data = await res.json()
+                if (data && data.display_name) {
+                  m._addressFetched = true
+                  m._lastAddress = data.display_name
+                  const newPopup = popup.replace(`<!--ADDR_${device.imei}-->`, `<div style="font-size:10px;color:#334155;margin-top:8px;line-height:1.4;background:#F1F5F9;padding:6px;border-radius:4px">📍 ${data.display_name}</div>`)
+                  m.getPopup().setContent(newPopup)
+                } else {
+                  m.getPopup().setContent(popup.replace(`<!--ADDR_${device.imei}-->`, `<div style="font-size:10px;color:#EF4444;margin-top:8px">📍 Alamat tidak ditemukan</div>`))
+                }
+              } catch (e) {
+                m.getPopup().setContent(popup.replace(`<!--ADDR_${device.imei}-->`, `<div style="font-size:10px;color:#EF4444;margin-top:8px">📍 Gagal memuat alamat</div>`))
+              }
+            } else if (m._lastAddress) {
+                const newPopup = popup.replace(`<!--ADDR_${device.imei}-->`, `<div style="font-size:10px;color:#334155;margin-top:8px;line-height:1.4;background:#F1F5F9;padding:6px;border-radius:4px">📍 ${m._lastAddress}</div>`)
+                m.getPopup().setContent(newPopup)
+            }
+          })
+          
           markersRef.current.set(device.imei, m)
         }
       })

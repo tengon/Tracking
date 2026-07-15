@@ -1,29 +1,59 @@
 'use client'
 import Topbar from '@/components/layout/Topbar'
+import { useEffect, useState, useCallback } from 'react'
 
-const alarmTypes = [
-  { id: '1', name: 'SOS Alert', icon: '🚨', color: 'var(--red)', count: 3 },
-  { id: '2', name: 'Speeding', icon: '⚡', color: 'var(--amber)', count: 7 },
-  { id: '3', name: 'Geofence In/Out', icon: '🗺️', color: 'var(--purple)', count: 4 },
-  { id: '4', name: 'Low Battery', icon: '🔋', color: 'var(--amber)', count: 2 },
-  { id: '5', name: 'ACC On/Off', icon: '🔑', color: 'var(--cyan)', count: 12 },
-  { id: '6', name: 'Harsh Braking', icon: '🛑', color: 'var(--red)', count: 1 },
-  { id: '7', name: 'Collision (DVR)', icon: '💥', color: 'var(--red)', count: 0 },
-  { id: '8', name: 'Distraction (DMS)', icon: '😴', color: 'var(--amber)', count: 2 },
-]
-
-const recentAlarms = [
-  { type: 'Speeding', device: 'JC450Pro-01739', imei: '869247060001739', time: '2026-07-14 18:32:00', speed: '98 km/h', addr: 'Jl. Sudirman, Jakarta', color: 'var(--amber)' },
-  { type: 'SOS Alert', device: 'VL802-69660', imei: '860121060369660', time: '2026-07-14 17:55:00', speed: '—', addr: 'Jl. MH Thamrin, Jakarta', color: 'var(--red)' },
-  { type: 'Geofence Exit', device: 'GT300L-3604', imei: '868120145233604', time: '2026-07-14 16:10:00', speed: '45 km/h', addr: 'Tangerang, Banten', color: 'var(--purple)' },
-  { type: 'Low Battery', device: 'VL802-69660', imei: '860121060369660', time: '2026-07-14 14:20:00', speed: '—', addr: '—', color: 'var(--amber)' },
-  { type: 'Distraction Alert (DMS)', device: 'JC450Pro-01739', imei: '869247060001739', time: '2026-07-14 13:05:00', speed: '60 km/h', addr: 'Tol Jagorawi Km 12', color: 'var(--red)' },
-]
+const ALARM_CONFIGS: Record<string, { name: string, icon: string, color: string }> = {
+  '1': { name: 'SOS Alert', icon: '🚨', color: 'var(--red)' },
+  '2': { name: 'Speeding', icon: '⚡', color: 'var(--amber)' },
+  '3': { name: 'Geofence In/Out', icon: '🗺️', color: 'var(--purple)' },
+  '4': { name: 'Low Battery', icon: '🔋', color: 'var(--amber)' },
+  '5': { name: 'ACC On/Off', icon: '🔑', color: 'var(--cyan)' },
+  '6': { name: 'Harsh Braking', icon: '🛑', color: 'var(--red)' },
+  '7': { name: 'Collision (DVR)', icon: '💥', color: 'var(--red)' },
+  '8': { name: 'Distraction (DMS)', icon: '😴', color: 'var(--amber)' },
+}
 
 export default function AlarmsPage() {
+  const [alarms, setAlarms] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchAlarms = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/alarms')
+      const json = await res.json()
+      if (json.success) {
+        setAlarms(json.data)
+      }
+    } catch (e) {
+      console.error('Failed to load alarms:', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchAlarms()
+    const iv = setInterval(fetchAlarms, 10000) // auto-refresh every 10s
+    return () => clearInterval(iv)
+  }, [fetchAlarms])
+
+  // Compute counts
+  const alarmTypes = Object.entries(ALARM_CONFIGS).map(([id, config]) => {
+    const count = alarms.filter(a => String(a.alarm_type) === id).length
+    return { id, ...config, count }
+  })
+
+  // Group unknown types under a generic bucket
+  const knownTypeIds = Object.keys(ALARM_CONFIGS)
+  const unknownCount = alarms.filter(a => !knownTypeIds.includes(String(a.alarm_type))).length
+  if (unknownCount > 0) {
+    alarmTypes.push({ id: '99', name: 'Other Alarms', icon: '🔔', color: 'var(--text-secondary)', count: unknownCount })
+  }
+
   return (
     <>
-      <Topbar title="Alarm Center" subtitle="Real-time alerts and event monitoring" />
+      <Topbar title="Alarm Center" subtitle={loading ? "Loading..." : "Real-time alerts and event monitoring"} />
       <div className="page-header">
         <h1 className="page-title">🔔 Alarm Center</h1>
         <p className="page-subtitle">Monitor events from your fleet devices including ADAS & DMS alerts</p>
@@ -45,35 +75,47 @@ export default function AlarmsPage() {
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--bg-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: 700, fontSize: 15 }}>📋 Recent Alarms</span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <span className="badge badge-alarm">31 Total</span>
-            <button className="btn btn-secondary btn-sm">↻ Refresh</button>
+            <span className="badge badge-alarm">{alarms.length} Total</span>
+            <button className="btn btn-secondary btn-sm" onClick={fetchAlarms} disabled={loading}>
+              {loading ? '⟳ Refreshing...' : '↻ Refresh'}
+            </button>
           </div>
         </div>
         <div className="table-wrap" style={{ border: 'none', borderRadius: 0 }}>
           <table>
             <thead>
-              <tr><th>Type</th><th>Device</th><th>Time</th><th>Speed</th><th>Location</th><th>Action</th></tr>
+              <tr><th>Type</th><th>Device IMEI</th><th>Time</th><th>Speed</th><th>Location (Lat/Lng)</th><th>Action</th></tr>
             </thead>
             <tbody>
-              {recentAlarms.map((a, i) => (
-                <tr key={i}>
-                  <td>
-                    <span className="badge" style={{ background: `${a.color}15`, color: a.color, border: `1px solid ${a.color}40` }}>
-                      {a.type}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{a.device}</div>
-                    <div className="mono">{a.imei}</div>
-                  </td>
-                  <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{a.time}</td>
-                  <td style={{ fontWeight: 600, color: a.speed !== '—' ? 'var(--amber)' : 'var(--text-muted)' }}>{a.speed}</td>
-                  <td style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 200 }}>{a.addr}</td>
-                  <td>
-                    <button className="btn btn-secondary btn-sm">View</button>
+              {alarms.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+                    No alarms received yet.
                   </td>
                 </tr>
-              ))}
+              ) : alarms.map((a, i) => {
+                const config = ALARM_CONFIGS[a.alarm_type] || { name: a.alarm_name || `Unknown (${a.alarm_type})`, color: 'var(--text-secondary)' }
+                return (
+                  <tr key={a.id || i}>
+                    <td>
+                      <span className="badge" style={{ background: `${config.color}15`, color: config.color, border: `1px solid ${config.color}40` }}>
+                        {config.name}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="mono" style={{ fontWeight: 600 }}>{a.imei}</div>
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{a.alarm_time}</td>
+                    <td style={{ fontWeight: 600, color: Number(a.speed) > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{a.speed} km/h</td>
+                    <td style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 200 }}>
+                      {a.lat && a.lng ? `${a.lat}, ${a.lng}` : '—'}
+                    </td>
+                    <td>
+                      <button className="btn btn-secondary btn-sm" onClick={() => alert(a.raw_data)}>View JSON</button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

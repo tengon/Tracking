@@ -86,6 +86,9 @@ export interface DeviceLocation {
   iccid?: string
   chargeStatus?: string | null
   shutdown?: string | null
+  assignedTo?: string | null
+  customColor?: string | null
+  _jimiAccount?: string | null
 }
 
 // ─── Track ───────────────────────────────────────────────

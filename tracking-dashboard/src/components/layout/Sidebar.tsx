@@ -35,10 +35,10 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        <img src="/images/tracking-logo.png" alt="Logo" style={{ width: 36, height: 'auto', borderRadius: 8 }} />
+        <img src="/images/track-page-logo.png" alt="Logo" style={{ width: 'auto', height: 50, borderRadius: 8 }} />
         <div>
-          <div className="sidebar-logo-text">Tracking Aja</div>
-          <div className="sidebar-logo-sub">Fleet Dashboard</div>
+          <div className="sidebar-logo-text" style={{ justifyContent: 'center' }}>Tracking</div>
+          <div className="sidebar-logo-sub" style={{ justifyContent: 'center' }}>Management Dashboard</div>
         </div>
       </div>
 

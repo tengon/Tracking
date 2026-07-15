@@ -41,6 +41,19 @@ db.exec(`
     detail TEXT,
     ts DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS device_alarms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    imei TEXT,
+    alarm_type TEXT,
+    alarm_name TEXT,
+    alarm_time TEXT,
+    speed TEXT,
+    lat REAL,
+    lng REAL,
+    raw_data TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `)
 
 // --- Helper Functions ---
@@ -101,6 +114,29 @@ export function upsertUserPrefs(data: {
       map_center_lat = excluded.map_center_lat,
       map_center_lng = excluded.map_center_lng,
       map_zoom = excluded.map_zoom
+  `)
+  return stmt.run(data)
+}
+
+// Alarms
+export function getAlarms(limit: number = 100) {
+  const stmt = db.prepare('SELECT * FROM device_alarms ORDER BY created_at DESC, id DESC LIMIT ?')
+  return stmt.all(limit)
+}
+
+export function insertAlarm(data: {
+  imei: string;
+  alarm_type: string;
+  alarm_name: string;
+  alarm_time: string;
+  speed: string;
+  lat: number;
+  lng: number;
+  raw_data: string;
+}) {
+  const stmt = db.prepare(`
+    INSERT INTO device_alarms (imei, alarm_type, alarm_name, alarm_time, speed, lat, lng, raw_data)
+    VALUES (@imei, @alarm_type, @alarm_name, @alarm_time, @speed, @lat, @lng, @raw_data)
   `)
   return stmt.run(data)
 }

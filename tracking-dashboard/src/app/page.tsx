@@ -32,7 +32,7 @@ export default function DashboardPage() {
 
   async function fetchLocations() {
     if (!accessToken || !account) return
-    
+
     const targetAccount = contextAccount || account;
 
     try {
@@ -54,14 +54,21 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchLocations()
-    const interval = setInterval(fetchLocations, 30000)
+    const interval = setInterval(fetchLocations, 10000)
     return () => clearInterval(interval)
   }, [accessToken, account, contextAccount])
 
-  const online  = locations.filter(d => d.status === '1').length
+  const online = locations.filter(d => d.status === '1').length
   const offline = locations.filter(d => d.status === '0').length
-  const moving  = locations.filter(d => d.status === '1' && Number(d.speed) > 0).length
-  const total   = locations.length
+  const moving = locations.filter(d => d.status === '1' && Number(d.speed) > 0).length
+  const total = locations.length
+
+  const groupedLocations = locations.reduce((acc, loc) => {
+    const groupName = loc.assignedTo || account || 'Unassigned'
+    if (!acc[groupName]) acc[groupName] = []
+    acc[groupName].push(loc)
+    return acc
+  }, {} as Record<string, DeviceLocation[]>)
 
   const alarmCount = 0 // Placeholder
 
@@ -76,7 +83,7 @@ export default function DashboardPage() {
       <Topbar title="Dashboard" subtitle={lastUpdate ? `Last update: ${lastUpdate.toLocaleTimeString('id-ID')}` : 'Loading...'} />
 
       <div style={{ maxWidth: 1400 }}>
-        {/* Greeting */}
+        {/* Greeting 
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>
             Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'} 👋
@@ -84,15 +91,15 @@ export default function DashboardPage() {
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             Fleet overview for account <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>{account}</span>
           </p>
-        </div>
+        </div>*/}
 
         {/* Stats */}
         <div className="stats-grid">
-          <StatCard icon="🚗" label="Total Devices"  value={loading ? '—' : total}   accent="var(--cyan)"   />
-          <StatCard icon="🟢" label="Online"         value={loading ? '—' : online}  accent="var(--green)"  delta={total > 0 ? `${Math.round(online/total*100)}% uptime` : ''} />
-          <StatCard icon="🔴" label="Offline"        value={loading ? '—' : offline} accent="var(--red)"    />
-          <StatCard icon="▶️"  label="Moving"         value={loading ? '—' : moving}  accent="var(--cyan)"   />
-          <StatCard icon="🔔" label="Active Alarms"  value={alarmCount}              accent="var(--amber)"  />
+          <StatCard icon="🚗" label="Total Devices" value={loading ? '—' : total} accent="var(--cyan)" />
+          <StatCard icon="🟢" label="Online" value={loading ? '—' : online} accent="var(--green)" delta={total > 0 ? `${Math.round(online / total * 100)}% uptime` : ''} />
+          <StatCard icon="🔴" label="Offline" value={loading ? '—' : offline} accent="var(--red)" />
+          <StatCard icon="▶️" label="Moving" value={loading ? '—' : moving} accent="var(--cyan)" />
+          <StatCard icon="🔔" label="Active Alarms" value={alarmCount} accent="var(--amber)" />
         </div>
 
         {/* Body Grid */}
@@ -116,64 +123,75 @@ export default function DashboardPage() {
                     <th>Battery</th>
                   </tr>
                 </thead>
-                <tbody>
                   {loading ? (
-                    [...Array(4)].map((_, i) => (
-                      <tr key={i}>
-                        {[...Array(7)].map((_, j) => (
-                          <td key={j}><div className="skeleton" style={{ height: 16, width: '80%' }} /></td>
-                        ))}
-                      </tr>
-                    ))
+                    <tbody>
+                      {[...Array(4)].map((_, i) => (
+                        <tr key={i}>
+                          {[...Array(7)].map((_, j) => (
+                            <td key={j}><div className="skeleton" style={{ height: 16, width: '80%' }} /></td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
                   ) : locations.length === 0 ? (
-                    <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>No devices found</td></tr>
+                    <tbody>
+                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>No devices found</td></tr>
+                    </tbody>
                   ) : (
-                    locations.slice(0, 10).map(d => (
-                      <tr key={d.imei}>
-                        <td>
-                          <div style={{ fontWeight: 600, fontSize: 13, color: d.customColor || 'var(--text-primary)' }}>{d.deviceName}</div>
-                          <div className="mono">{d.imei}</div>
-                        </td>
-                        <td>
-                          {d.assignedTo ? (
-                            <span style={{ fontSize: 10, color: 'var(--cyan)', background: 'rgba(0,245,255,0.08)', padding: '2px 8px', borderRadius: 4, fontWeight: 700, border: '1px solid rgba(0,245,255,0.2)' }}>
-                              👤 {d.assignedTo}
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)' }}>—</span>
-                          )}
-                        </td>
-                        <td>
-                          <span className={`badge badge-${d.status === '1' ? (Number(d.speed) > 0 ? 'moving' : 'online') : 'offline'}`}>
-                            {d.status === '1' ? (Number(d.speed) > 0 ? '▶ Moving' : '● Online') : '✕ Offline'}
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: 600, color: Number(d.speed) > 0 ? 'var(--cyan)' : 'var(--text-muted)' }}>
-                          {d.speed} km/h
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: 3 }}>
-                            {[1,2,3,4].map(i => (
-                              <div key={i} style={{
-                                width: 4, height: 12 * (i/4) + 4,
-                                background: Number(d.gpsSignal) >= i ? 'var(--green)' : 'var(--bg-border)',
-                                borderRadius: 2, alignSelf: 'flex-end'
-                              }} />
-                            ))}
-                          </div>
-                        </td>
-                        <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                          {d.hbTime?.slice(11,16) || '—'}
-                        </td>
-                        <td>
-                          <span style={{ fontSize: 12, color: Number(d.batteryPowerVal) < 20 ? 'var(--red)' : 'var(--text-secondary)' }}>
-                            {d.batteryPowerVal ? `${d.batteryPowerVal}%` : '—'}
-                          </span>
-                        </td>
-                      </tr>
+                    Object.entries(groupedLocations).map(([group, locs]) => (
+                      <tbody key={group}>
+                        <tr style={{ background: 'rgba(0,212,255,0.05)' }}>
+                          <td colSpan={7} style={{ fontWeight: 700, color: 'var(--cyan)', padding: '10px 16px', borderBottom: '1px solid rgba(0,212,255,0.1)' }}>
+                            🏢 {group} <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>({locs.length} devices)</span>
+                          </td>
+                        </tr>
+                        {locs.map(d => (
+                          <tr key={d.imei}>
+                            <td>
+                              <div style={{ fontWeight: 600, fontSize: 13, color: d.customColor || 'var(--text-primary)' }}>{d.deviceName}</div>
+                              <div className="mono">{d.imei}</div>
+                            </td>
+                            <td>
+                              {d.assignedTo ? (
+                                <span style={{ fontSize: 10, color: 'var(--cyan)', background: 'rgba(0,245,255,0.08)', padding: '2px 8px', borderRadius: 4, fontWeight: 700, border: '1px solid rgba(0,245,255,0.2)' }}>
+                                  👤 {d.assignedTo}
+                                </span>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)' }}>—</span>
+                              )}
+                            </td>
+                            <td>
+                              <span className={`badge badge-${d.status === '1' ? (Number(d.speed) > 0 ? 'moving' : 'online') : 'offline'}`}>
+                                {d.status === '1' ? (Number(d.speed) > 0 ? '▶ Moving' : '● Online') : '✕ Offline'}
+                              </span>
+                            </td>
+                            <td style={{ fontWeight: 600, color: Number(d.speed) > 0 ? 'var(--cyan)' : 'var(--text-muted)' }}>
+                              {d.speed} km/h
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 3 }}>
+                                {[1, 2, 3, 4].map(i => (
+                                  <div key={i} style={{
+                                    width: 4, height: 12 * (i / 4) + 4,
+                                    background: Number(d.gpsSignal) >= i ? 'var(--green)' : 'var(--bg-border)',
+                                    borderRadius: 2, alignSelf: 'flex-end'
+                                  }} />
+                                ))}
+                              </div>
+                            </td>
+                            <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                              {d.hbTime?.slice(11, 16) || '—'}
+                            </td>
+                            <td>
+                              <span style={{ fontSize: 12, color: Number(d.batteryPowerVal) < 20 ? 'var(--red)' : 'var(--text-secondary)' }}>
+                                {d.batteryPowerVal ? `${d.batteryPowerVal}%` : '—'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
                     ))
                   )}
-                </tbody>
               </table>
             </div>
           </div>
