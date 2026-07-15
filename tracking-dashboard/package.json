@@ -1,0 +1,45 @@
+{
+  "name": "tracking-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "crypto-js": "^4.2.0",
+    "flatpickr": "^4.6.13",
+    "leaflet": "^1.9.4",
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-flatpickr": "^4.0.11",
+    "react-leaflet": "^5.0.0",
+    "recharts": "^3.9.2",
+    "swr": "^2.4.2",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/crypto-js": "^4.2.2",
+    "@types/leaflet": "^1.9.21",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/react-flatpickr": "^3.8.11",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "typescript": "^5"
+  },
+  "ignoreScripts": [
+    "sharp",
+    "unrs-resolver"
+  ],
+  "trustedDependencies": [
+    "sharp",
+    "unrs-resolver"
+  ]
+}

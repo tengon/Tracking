@@ -1,0 +1,14 @@
+# don't share or push to github
+
+## bitauto
+account:bitauto
+password:1fea5970bf5ff87cc3855133ec885f85
+appKey:8FB345B8693CCD00C95F185BDBFE2768339A22A4105B6558
+appSecret:eed253fa7b984e9895655feb35365362
+
+##tengon
+account: 754269
+password5: 8d20684c3e199af4fca3278206f214d1
+appKey: 8FB345B8693CCD00023DAE386436CBD0
+appSecret: a23b396ab23343baa97a09208853fe61
+

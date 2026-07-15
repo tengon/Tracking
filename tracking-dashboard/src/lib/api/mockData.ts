@@ -1,0 +1,208 @@
+import type { DeviceLocation, Device, Geofence, TrackPoint, MileageTrip } from './types'
+
+export const mockLocations: DeviceLocation[] = [
+  {
+    imei: '869247060001739',
+    deviceName: 'JC450Pro - Delivery Van 01',
+    status: '1',
+    speed: '62',
+    lat: -6.2088,
+    lng: 106.8456,
+    direction: '180',
+    gpsTime: '2026-07-14 22:15:30',
+    hbTime: '2026-07-14 22:15:30',
+    accStatus: '1',
+    gpsSignal: '4',
+    batteryPowerVal: '92',
+    currentMileage: '12850.4',
+    gpsNum: '14',
+    icon: 'bus',
+    expireFlag: '1',
+    activationFlag: '1',
+    posType: 'GPS',
+    locDesc: '',
+    powerValue: null,
+    distance: '0',
+    temperature: null,
+    trackerOil: null,
+    electQuantity: '100',
+    confidence: null
+  },
+  {
+    imei: '860121060369660',
+    deviceName: 'VL802 - Executive Sedan 02',
+    status: '1',
+    speed: '0',
+    lat: -6.1754,
+    lng: 106.8272,
+    direction: '90',
+    gpsTime: '2026-07-14 22:14:15',
+    hbTime: '2026-07-14 22:14:15',
+    accStatus: '0',
+    gpsSignal: '3',
+    batteryPowerVal: '14',
+    currentMileage: '34912.8',
+    gpsNum: '10',
+    icon: 'automobile',
+    expireFlag: '1',
+    activationFlag: '1',
+    posType: 'GPS',
+    locDesc: '',
+    powerValue: null,
+    distance: '0',
+    temperature: null,
+    trackerOil: null,
+    electQuantity: '100',
+    confidence: null
+  },
+  {
+    imei: '868120145233604',
+    deviceName: 'GT300L - Cargo Truck 03',
+    status: '0',
+    speed: '0',
+    lat: -6.2297,
+    lng: 106.6859,
+    direction: '270',
+    gpsTime: '2026-07-14 18:30:00',
+    hbTime: '2026-07-14 18:30:00',
+    accStatus: '0',
+    gpsSignal: '0',
+    batteryPowerVal: '85',
+    currentMileage: '85320.1',
+    gpsNum: '0',
+    icon: 'truck',
+    expireFlag: '1',
+    activationFlag: '1',
+    posType: 'GPS',
+    locDesc: '',
+    powerValue: null,
+    distance: '0',
+    temperature: null,
+    trackerOil: null,
+    electQuantity: '100',
+    confidence: null
+  }
+]
+
+export const mockDevices: Device[] = [
+  {
+    imei: '869247060001739',
+    deviceName: 'JC450Pro - Delivery Van 01',
+    mcType: 'DVR',
+    mcTypeUseScope: 'automobile',
+    sim: '896210001234567',
+    expiration: '2027-12-31 23:59:59',
+    activationTime: '2026-01-01 00:00:00',
+    reMark: '',
+    vehicleName: 'Toyota HiAce',
+    vehicleIcon: 'bus',
+    vehicleNumber: 'B 1234 SKA',
+    vehicleModels: 'JC450 Pro (ADAS/DMS)',
+    carFrame: '',
+    driverName: 'Ahmad Faisal',
+    driverPhone: '+628123456789',
+    enabledFlag: 1,
+    engineNumber: '',
+    deviceGroupId: '1',
+    deviceGroup: 'Delivery Jakarta'
+  },
+  {
+    imei: '860121060369660',
+    deviceName: 'VL802 - Executive Sedan 02',
+    mcType: 'Car Tracker',
+    mcTypeUseScope: 'automobile',
+    sim: '896210009876543',
+    expiration: '2026-08-15 23:59:59',
+    activationTime: '2026-01-01 00:00:00',
+    reMark: '',
+    vehicleName: 'Honda Accord',
+    vehicleIcon: 'automobile',
+    vehicleNumber: 'B 5678 PQR',
+    vehicleModels: 'VL802 (4G Waterproof)',
+    carFrame: '',
+    driverName: 'Siti Rahma',
+    driverPhone: '+628111222333',
+    enabledFlag: 1,
+    engineNumber: '',
+    deviceGroupId: '1',
+    deviceGroup: 'Corporate Cars'
+  },
+  {
+    imei: '868120145233604',
+    deviceName: 'GT300L - Cargo Truck 03',
+    mcType: 'Asset Tracker',
+    mcTypeUseScope: 'automobile',
+    sim: '896210005554443',
+    expiration: '2026-06-01 23:59:59',
+    activationTime: '2026-01-01 00:00:00',
+    reMark: '',
+    vehicleName: 'Hino Dutro',
+    vehicleIcon: 'truck',
+    vehicleNumber: 'B 9012 XYZ',
+    vehicleModels: 'GT300L (Asset GPS)',
+    carFrame: '',
+    driverName: 'Budi Santoso',
+    driverPhone: '+6285566778899',
+    enabledFlag: 1,
+    engineNumber: '',
+    deviceGroupId: '1',
+    deviceGroup: 'Logistics Banten'
+  }
+]
+
+export const mockGeofences: Geofence[] = [
+  {
+    fence_id: 'fence_01',
+    fence_name: 'Jakarta Warehouse HQ',
+    fence_type: 'circle',
+    fence_color: '#00d4ff',
+    coordinates: '-6.2088,106.8456',
+    radius: '1000',
+    description: 'Main distribution center geofence',
+    imeis: '869247060001739',
+    alert_type: 'both',
+    account: 'bitauto'
+  },
+  {
+    fence_id: 'fence_02',
+    fence_name: 'Singapore Transit Hub',
+    fence_type: 'circle',
+    fence_color: '#10b981',
+    coordinates: '1.3521,103.8198',
+    radius: '2000',
+    description: 'Changi Logistics Depot',
+    imeis: '860121060369660',
+    alert_type: 'both',
+    account: 'bitauto'
+  }
+]
+
+export const mockTrackPoints: TrackPoint[] = [
+  { lat: -6.1754, lng: 106.8272, gpsTime: '2026-07-14 10:00:00', direction: 180, gpsSpeed: 0, posType: 1, satellite: 12, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null },
+  { lat: -6.1801, lng: 106.8268, gpsTime: '2026-07-14 10:01:00', direction: 180, gpsSpeed: 35, posType: 1, satellite: 12, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null },
+  { lat: -6.1852, lng: 106.8260, gpsTime: '2026-07-14 10:02:00', direction: 180, gpsSpeed: 42, posType: 1, satellite: 13, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null },
+  { lat: -6.1905, lng: 106.8251, gpsTime: '2026-07-14 10:03:00', direction: 180, gpsSpeed: 50, posType: 1, satellite: 11, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null },
+  { lat: -6.1953, lng: 106.8229, gpsTime: '2026-07-14 10:04:00', direction: 220, gpsSpeed: 45, posType: 1, satellite: 14, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null },
+  { lat: -6.1998, lng: 106.8190, gpsTime: '2026-07-14 10:05:00', direction: 220, gpsSpeed: 20, posType: 1, satellite: 12, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null },
+  { lat: -6.2025, lng: 106.8152, gpsTime: '2026-07-14 10:06:00', direction: 240, gpsSpeed: 0, posType: 1, satellite: 10, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null }, // Stoplight
+  { lat: -6.2051, lng: 106.8125, gpsTime: '2026-07-14 10:07:00', direction: 240, gpsSpeed: 30, posType: 1, satellite: 12, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null },
+  { lat: -6.2084, lng: 106.8091, gpsTime: '2026-07-14 10:08:00', direction: 245, gpsSpeed: 55, posType: 1, satellite: 13, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null },
+  { lat: -6.2119, lng: 106.8062, gpsTime: '2026-07-14 10:09:00', direction: 245, gpsSpeed: 58, posType: 1, satellite: 12, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null },
+  { lat: -6.2152, lng: 106.8041, gpsTime: '2026-07-14 10:10:00', direction: 240, gpsSpeed: 40, posType: 1, satellite: 14, ignition: 'ON', accStatus: 'ON', gpsMode: 0, confidence: null },
+  { lat: -6.2185, lng: 106.8024, gpsTime: '2026-07-14 10:11:00', direction: 240, gpsSpeed: 0, posType: 1, satellite: 12, ignition: 'OFF', accStatus: 'OFF', gpsMode: 0, confidence: null }
+]
+
+export const mockTrips: MileageTrip[] = [
+  {
+    imei: '869247060001739',
+    startTime: '2026-07-14 10:00:00',
+    endTime: '2026-07-14 10:11:00',
+    startLat: -6.1754,
+    startLng: 106.8272,
+    endLat: -6.2185,
+    endLng: 106.8024,
+    elapsed: 660,
+    distance: 5740,
+    avgSpeed: 31.3
+  }
+]
