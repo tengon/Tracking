@@ -44,14 +44,10 @@ export default function LoginPage() {
       <div style={{ width: '100%', maxWidth: 420, position: 'relative', zIndex: 1 }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <div style={{
-            width: 72, height: 72, background: 'linear-gradient(135deg, var(--cyan), var(--purple))',
-            borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 36, margin: '0 auto 16px', boxShadow: 'var(--shadow-glow-cyan)'
-          }}>🛰️</div>
-          <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 6 }}>TrackSolid Pro</h1>
+          <img src="/images/tracking-logo.png" alt="Tracking Aja Logo" style={{ width: 100, height: 'auto', margin: '0 auto 16px', display: 'block' }} />
+          <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 6 }}>Tracking Aja</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Fleet Management Dashboard</p>
-        
+
         </div>
 
         {/* Card */}

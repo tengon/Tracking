@@ -35,9 +35,9 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        <div className="sidebar-logo-icon">🛰️</div>
+        <img src="/images/tracking-logo.png" alt="Logo" style={{ width: 36, height: 'auto', borderRadius: 8 }} />
         <div>
-          <div className="sidebar-logo-text">TrackSolid</div>
+          <div className="sidebar-logo-text">Tracking Aja</div>
           <div className="sidebar-logo-sub">Fleet Dashboard</div>
         </div>
       </div>
