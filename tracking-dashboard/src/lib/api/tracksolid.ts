@@ -1,8 +1,13 @@
 import CryptoJS from 'crypto-js'
+import https from 'https'
+import querystring from 'querystring'
 
 const APP_KEY = process.env.JIMI_APP_KEY!
 const APP_SECRET = process.env.JIMI_APP_SECRET!
 const BASE_URL = process.env.JIMI_BASE_URL || 'https://hk-open.tracksolidpro.com/route/rest'
+
+// Persistent HTTPS Agent to prevent connection timeouts on Windows
+const httpsAgent = new https.Agent({ keepAlive: true, family: 4 })
 
 // ─── Signature Generator ─────────────────────────────────────────────────────
 export function generateSign(params: Record<string, string>): string {
@@ -42,25 +47,38 @@ export async function jimiRequest<T>(
   const allParams = { ...common, ...privateParams }
   allParams.sign = generateSign(allParams)
 
-  const body = new URLSearchParams(allParams)
+  const postData = querystring.stringify(allParams)
 
-  const res = await fetch(BASE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
+  return new Promise((resolve, reject) => {
+    const req = https.request(BASE_URL, {
+      method: 'POST',
+      agent: httpsAgent,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    }, res => {
+      let data = ''
+      res.on('data', chunk => { data += chunk })
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data)
+          if (Number(json.code) !== 0) {
+            console.error('JIMI RAW ERROR RESPONSE:', data)
+            return reject(new Error(`JIMI API Error ${json.code}: ${json.message || JSON.stringify(json)}`))
+          }
+          resolve(json)
+        } catch (e) {
+          console.error('JIMI NON-JSON RESPONSE:', data)
+          reject(new Error(`Invalid JSON response: ${data}`))
+        }
+      })
+    })
+
+    req.on('error', err => reject(err))
+    req.write(postData)
+    req.end()
   })
-
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-  }
-
-  const json = await res.json()
-
-  if (json.code !== 0) {
-    throw new Error(`JIMI API Error ${json.code}: ${json.message}`)
-  }
-
-  return json
 }
 
 // ─── Token Management ─────────────────────────────────────────────────────────
@@ -79,8 +97,23 @@ export async function refreshToken(accessToken: string, refreshTok: string, expi
   })
 }
 
+// ─── Global Caching to prevent Error 1006 Rate Limit ───────────────────────
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const apiCache = new Map<string, { data: any, time: number }>()
+
 // ─── Account / Sub-accounts ──────────────────────────────────────────────────
 export async function getChildAccounts(accessToken: string, target: string) {
+  const key = `child_${target}`
+  const cached = apiCache.get(key)
+  if (cached && Date.now() - cached.time < CACHE_TTL) return cached.data
+
+  const res = await jimiRequest<{ result: SubAccount[] }>('jimi.user.child.list', { access_token: accessToken, target })
+  if ((res as any).code === 0) apiCache.set(key, { data: res, time: Date.now() })
+  return res
+}
+
+/** Same as getChildAccounts but BYPASSES the in-memory cache — used for full sync operations */
+export async function getChildAccountsDirect(accessToken: string, target: string) {
   return jimiRequest<{ result: SubAccount[] }>('jimi.user.child.list', { access_token: accessToken, target })
 }
 
@@ -161,7 +194,13 @@ export interface UpdateAccountParams {
 
 // ─── Device Management ────────────────────────────────────────────────────────
 export async function getDeviceList(accessToken: string, target: string) {
-  return jimiRequest('jimi.user.device.list', { access_token: accessToken, target })
+  const key = `devlist_${target}`
+  const cached = apiCache.get(key)
+  if (cached && Date.now() - cached.time < CACHE_TTL) return cached.data
+
+  const res = await jimiRequest('jimi.user.device.list', { access_token: accessToken, target })
+  if ((res as any).code === 0) apiCache.set(key, { data: res, time: Date.now() })
+  return res
 }
 
 export async function getDeviceDetail(accessToken: string, imei: string) {

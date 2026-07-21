@@ -83,7 +83,7 @@ export default function MapPage() {
 
   useEffect(() => {
     fetchLocations()
-    const iv = setInterval(fetchLocations, 10000)
+    const iv = setInterval(fetchLocations, 20000)
     return () => clearInterval(iv)
   }, [fetchLocations])
 

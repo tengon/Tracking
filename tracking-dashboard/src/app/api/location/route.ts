@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllDeviceLocations, getDeviceLocation, getChildAccounts } from '@/lib/api/tracksolid'
 import { getDeviceLabels } from '@/lib/db/database'
+import { getDescendants, hasAccountData } from '@/lib/db/postgres'
+
+// In-memory cache for JIMI-based fallback
+interface CachedAccount { account: string; depth: number }
+interface CacheEntry { data: CachedAccount[]; time: number }
+const accountTreeCache = new Map<string, CacheEntry>()
+const TREE_CACHE_TTL = 5 * 60 * 1000
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,38 +18,66 @@ export async function POST(req: NextRequest) {
       const result = await getDeviceLocation(accessToken, imeis)
       return NextResponse.json({ success: true, data: (result as any).result })
     } else {
-      // Helper to fetch locations recursively with depth to determine the most specific account
-      async function fetchAllLocationsRecursive(token: string, tgt: string, depth: number = 0): Promise<any[]> {
-        let locs: any[] = []
-        try {
-          const res = await getAllDeviceLocations(token, tgt)
-          if (res && Array.isArray((res as any).result)) {
-            const mappedLocs = (res as any).result.map((d: any) => ({ ...d, _jimiAccount: tgt, _depth: depth }))
-            locs = locs.concat(mappedLocs)
+      let tree: CachedAccount[]
+
+      // ── 1. Try PostgreSQL ─────────────────────────────────────────────────
+      const hasPgData = await hasAccountData(target)
+      if (hasPgData) {
+        const cached = accountTreeCache.get(`pg_${target}`)
+        if (cached && Date.now() - cached.time < TREE_CACHE_TTL) {
+          tree = cached.data
+        } else {
+          const rows = await getDescendants(target)
+          tree = rows
+          accountTreeCache.set(`pg_${target}`, { data: tree, time: Date.now() })
+        }
+      } else {
+        // ── 2. Fallback: JIMI API with in-memory cache ──────────────────────
+        async function buildFromJimi(token: string, tgt: string, depth = 0): Promise<CachedAccount[]> {
+          let list: CachedAccount[] = [{ account: tgt, depth }]
+          try {
+            const childRes = await getChildAccounts(token, tgt)
+            let children = (childRes as any).result || []
+            children = children.filter((c: any) => c.account !== tgt)
+            for (const c of children) {
+              const sub = await buildFromJimi(token, c.account, depth + 1)
+              list = list.concat(sub)
+            }
+          } catch (e) {
+            console.error(`Failed to fetch children for ${tgt}:`, e)
           }
-        } catch (e) {
-          console.error(`Failed to fetch locations for ${tgt}:`, e)
+          return list
         }
 
-        try {
-          const childRes = await getChildAccounts(token, tgt)
-          let children = (childRes as any).result || []
-          
-          // Prevent infinite recursion if API returns parent in child list
-          children = children.filter((c: any) => c.account !== tgt)
-          
-          const promises = children.map((c: any) => fetchAllLocationsRecursive(token, c.account, depth + 1))
-          const childLocs = await Promise.all(promises)
-          childLocs.forEach(cl => locs = locs.concat(cl))
-        } catch (e) {
-          console.error(`Failed to fetch children for ${tgt}:`, e)
+        let cached = accountTreeCache.get(target)
+        if (!cached || Date.now() - cached.time > TREE_CACHE_TTL) {
+          const data = await buildFromJimi(accessToken, target, 0)
+          accountTreeCache.set(target, { data, time: Date.now() })
+          cached = accountTreeCache.get(target)
         }
-        return locs
+        tree = cached!.data
       }
 
-      let allLocations: any[] = await fetchAllLocationsRecursive(accessToken, target, 0)
 
-      // Deduplicate by IMEI (keep the one with highest depth to ensure the most specific sub-account wins)
+      // 2. Fetch locations for all cached accounts
+      let allLocations: any[] = []
+      const promises = tree.map(async (acc) => {
+        try {
+          const res = await getAllDeviceLocations(accessToken, acc.account)
+          if (res && Array.isArray((res as any).result)) {
+            const mappedLocs = (res as any).result.map((d: any) => ({ ...d, _jimiAccount: acc.account, _depth: acc.depth }))
+            return mappedLocs
+          }
+        } catch (e) {
+          console.error(`Failed to fetch locations for ${acc.account}:`, e)
+        }
+        return []
+      })
+      
+      const results = await Promise.all(promises)
+      results.forEach(locs => allLocations = allLocations.concat(locs))
+
+      // 3. Deduplicate by IMEI (keep the one with highest depth to ensure the most specific sub-account wins)
       const uniqueLocs = new Map<string, any>()
       allLocations.forEach(loc => {
         if (loc && loc.imei) {

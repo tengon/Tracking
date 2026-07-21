@@ -34,8 +34,9 @@ export default function GeofencesPage() {
         body: JSON.stringify({ accessToken, account }),
       })
       const json = await res.json()
-      if (json.success && Array.isArray(json.data?.rows)) {
-        setGeofences(json.data.rows)
+      if (json.success) {
+        const list = Array.isArray(json.data) ? json.data : (Array.isArray(json.data?.rows) ? json.data.rows : [])
+        setGeofences(list)
       } else {
         setGeofences([])
       }
@@ -124,7 +125,7 @@ export default function GeofencesPage() {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Center (lat,lng)</label>
+              <label className="form-label">{newFence.type === 'circle' ? 'Center (lat,lng)' : 'Coordinates'}</label>
               <input className="form-input" placeholder="-6.200,106.816" value={newFence.coordinates} onChange={e => setNewFence(p => ({ ...p, coordinates: e.target.value }))} />
             </div>
             {newFence.type === 'circle' && (
@@ -152,7 +153,14 @@ export default function GeofencesPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
         {/* Map */}
         <div style={{ borderRadius: 'var(--r-lg)', overflow: 'hidden', border: '1px solid var(--bg-border)', height: 'calc(100vh - 220px)', minHeight: 800 }}>
-          <GeofenceMap geofences={geofences} selected={selected} onSelect={setSelected} />
+          <GeofenceMap 
+            geofences={geofences} 
+            selected={selected} 
+            onSelect={setSelected}
+            isDrawing={showCreate}
+            draftFence={showCreate ? newFence : null}
+            onDraftUpdate={(updates) => setNewFence(p => ({ ...p, ...updates }))}
+          />
         </div>
 
         {/* List */}
