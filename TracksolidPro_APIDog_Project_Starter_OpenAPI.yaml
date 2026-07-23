@@ -1,0 +1,113 @@
+
+openapi: 3.0.3
+info:
+  title: TracksolidPro Open API (APIDog Project Starter)
+  version: "2.7.14"
+  description: |
+    Starter project untuk diimpor ke APIDog.
+    Tambahkan endpoint lain sesuai dokumentasi TracksolidPro API v2.7.14.
+servers:
+  - url: http://open.10000track.com/route/rest
+components:
+  securitySchemes:
+    AccessToken:
+      type: apiKey
+      in: query
+      name: access_token
+  schemas:
+    TokenResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        result:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+            expiresIn:
+              type: integer
+            appKey:
+              type: string
+            account:
+              type: string
+paths:
+  /:
+    post:
+      summary: Get Access Token
+      operationId: jimi.oauth.token.get
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - method
+                - app_key
+                - sign
+                - sign_method
+                - timestamp
+                - format
+                - v
+                - user_id
+                - user_pwd_md5
+                - expires_in
+              properties:
+                method:
+                  type: string
+                  example: jimi.oauth.token.get
+                app_key:
+                  type: string
+                sign:
+                  type: string
+                sign_method:
+                  type: string
+                  example: md5
+                timestamp:
+                  type: string
+                format:
+                  type: string
+                  example: json
+                v:
+                  type: string
+                  example: "1.0"
+                user_id:
+                  type: string
+                user_pwd_md5:
+                  type: string
+                expires_in:
+                  type: integer
+                  example: 7200
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+  /device-list:
+    post:
+      summary: List Devices
+      operationId: jimi.user.device.list
+      security:
+        - AccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                method:
+                  type: string
+                  example: jimi.user.device.list
+                access_token:
+                  type: string
+      responses:
+        "200":
+          description: Device list

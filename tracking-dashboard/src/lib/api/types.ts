@@ -133,10 +133,41 @@ export interface ParkingRecord {
   lng: number
   lat: number
   addr: string
-  deviceName: string
-  mcType: string
-  acc: string
-  stopSecond: string
+  deviceName?: string
+  mcType?: string
+  acc?: string
+  stopSecond?: string
+}
+
+export interface TripReportRecord {
+  imei: string
+  deviceName?: string
+  startTime: string
+  endTime: string
+  startLat: number
+  startLng: number
+  startAddress?: string
+  endLat: number
+  endLng: number
+  endAddress?: string
+  elapsed: number // seconds
+  distance: number // meters
+  avgSpeed: number // km/h
+  maxSpeed?: number // km/h
+}
+
+export interface FenceDurationRecord {
+  fenceId: string
+  fenceName: string
+  imei: string
+  deviceName?: string
+  enterTime: string
+  exitTime: string
+  durationSecond: number
+  enterLat?: number
+  enterLng?: number
+  exitLat?: number
+  exitLng?: number
 }
 
 // ─── Geofence ────────────────────────────────────────────

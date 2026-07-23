@@ -81,10 +81,32 @@ export default function MapPage() {
     fetchTree()
   }, [fetchTree])
 
+  // ── Auto-refresh: hanya aktif saat tab Live Map terlihat ──────────────
   useEffect(() => {
-    fetchLocations()
-    const iv = setInterval(fetchLocations, 20000)
-    return () => clearInterval(iv)
+    let iv: NodeJS.Timeout | null = null
+
+    const startPolling = () => {
+      if (iv) return
+      fetchLocations()
+      iv = setInterval(fetchLocations, 10000)
+    }
+
+    const stopPolling = () => {
+      if (iv) { clearInterval(iv); iv = null }
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') startPolling()
+      else stopPolling()
+    }
+
+    if (document.visibilityState === 'visible') startPolling()
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      stopPolling()
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [fetchLocations])
 
   // Group devices by account
@@ -220,7 +242,7 @@ export default function MapPage() {
 
   return (
     <>
-      <Topbar title="Live Map" subtitle={lastUpdate ? `Updated ${lastUpdate.toLocaleTimeString('id-ID')}` : 'Loading...'} />
+      <Topbar title="Live Map" subtitle="Real-time GPS Tracking" lastUpdate={lastUpdate} />
 
       <div style={{ display: 'flex', height: 'calc(100vh - var(--topbar-h) - 48px)', border: '1px solid var(--bg-border)', borderRadius: 'var(--r-lg)', overflow: 'hidden', position: 'relative' }}>
         

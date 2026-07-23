@@ -2,7 +2,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import { useAuthStore } from '@/lib/store/authStore'
+import { useThemeStore } from '@/lib/store/themeStore'
 import type { SubAccount } from '@/lib/api/tracksolid'
+import Link from 'next/link'
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 type ModalMode = 'create' | 'edit' | null
@@ -22,6 +24,7 @@ const emptyForm: FormState = {
 
 export default function UsersPage() {
   const { accessToken, account: myAccount } = useAuthStore()
+  const { theme, setTheme } = useThemeStore()
   const [users,    setUsers]    = useState<SubAccount[]>([])
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState<string | null>(null)
@@ -126,6 +129,131 @@ export default function UsersPage() {
         title="User Management"
         subtitle={`${users.length} sub-account terdaftar`}
       />
+
+      {/* Navigation Tabs */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+        <Link
+          href="/users"
+          className="btn btn-secondary btn-sm"
+          style={{
+            padding: '8px 16px',
+            fontSize: 13,
+            fontWeight: 700,
+            background: 'rgba(0,245,255,0.15)',
+            color: 'var(--cyan)',
+            border: '1px solid rgba(0,245,255,0.3)',
+            borderRadius: 'var(--r-md)',
+          }}
+        >
+          👥 User Management
+        </Link>
+        <Link
+          href="/users/api-test"
+          className="btn btn-ghost btn-sm"
+          style={{
+            padding: '8px 16px',
+            fontSize: 13,
+            fontWeight: 600,
+            border: '1px solid var(--bg-border)',
+            borderRadius: 'var(--r-md)',
+          }}
+        >
+          🧪 API Test Console & Debugger
+        </Link>
+      </div>
+
+      {/* ── Theme Switcher Panel ─────────────────────────────────────────── */}
+      <div
+        className="card"
+        style={{
+          marginBottom: 20,
+          background: 'linear-gradient(135deg, rgba(0,119,255,0.04) 0%, transparent 100%)',
+          borderLeft: '4px solid var(--cyan)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+          {/* Label */}
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--text-primary)' }}>🎨 Tampilan Aplikasi</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Pilih tema antarmuka yang Anda inginkan</div>
+          </div>
+
+          {/* Theme Option Cards */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            {/* Dark Mode Card */}
+            <button
+              onClick={() => setTheme('dark')}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 20px',
+                borderRadius: 'var(--r-lg)',
+                border: theme === 'dark' ? '2px solid var(--cyan)' : '2px solid var(--bg-border)',
+                background: theme === 'dark' ? 'rgba(0,245,255,0.08)' : 'var(--bg-elevated)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: theme === 'dark' ? '0 0 16px rgba(0,119,255,0.25)' : 'none',
+                minWidth: 100,
+              }}
+            >
+              {/* Dark Preview Swatch */}
+              <div style={{
+                width: 60, height: 40, borderRadius: 8,
+                background: '#070710',
+                border: '1px solid #1A1A2E',
+                display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center',
+                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.5)',
+              }}>
+                <div style={{ width: 8, height: 20, background: '#00F5FF', borderRadius: 2, opacity: 0.8 }} />
+                <div style={{ width: 8, height: 14, background: '#BF00FF', borderRadius: 2, opacity: 0.6 }} />
+                <div style={{ width: 8, height: 17, background: '#00FF41', borderRadius: 2, opacity: 0.7 }} />
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: theme === 'dark' ? 'var(--cyan)' : 'var(--text-muted)' }}>🌙 Mode Gelap</div>
+              {theme === 'dark' && (
+                <div style={{ fontSize: 9, padding: '2px 8px', borderRadius: 99, background: 'var(--cyan)', color: '#000', fontWeight: 800 }}>AKTIF</div>
+              )}
+            </button>
+
+            {/* Light Mode Card */}
+            <button
+              onClick={() => setTheme('light')}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 20px',
+                borderRadius: 'var(--r-lg)',
+                border: theme === 'light' ? '2px solid var(--cyan)' : '2px solid var(--bg-border)',
+                background: theme === 'light' ? 'rgba(0,119,255,0.07)' : 'var(--bg-elevated)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: theme === 'light' ? '0 0 16px rgba(0,119,255,0.2)' : 'none',
+                minWidth: 100,
+              }}
+            >
+              {/* Light Preview Swatch */}
+              <div style={{
+                width: 60, height: 40, borderRadius: 8,
+                background: '#F0F4FF',
+                border: '1px solid #D1DCF5',
+                display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center',
+                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)',
+              }}>
+                <div style={{ width: 8, height: 20, background: '#0077FF', borderRadius: 2, opacity: 0.8 }} />
+                <div style={{ width: 8, height: 14, background: '#6D28D9', borderRadius: 2, opacity: 0.6 }} />
+                <div style={{ width: 8, height: 17, background: '#16A34A', borderRadius: 2, opacity: 0.7 }} />
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: theme === 'light' ? 'var(--cyan)' : 'var(--text-muted)' }}>☀️ Mode Terang</div>
+              {theme === 'light' && (
+                <div style={{ fontSize: 9, padding: '2px 8px', borderRadius: 99, background: 'var(--cyan)', color: '#fff', fontWeight: 800 }}>AKTIF</div>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Notifications */}
       {(error || success) && (

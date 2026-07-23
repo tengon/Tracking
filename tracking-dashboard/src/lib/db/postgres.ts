@@ -887,3 +887,549 @@ export async function hasGeofenceData(account?: string): Promise<boolean> {
   return (res.rowCount ?? 0) > 0
 }
 
+// ─── Report Tables — DDL Init ─────────────────────────────────────────────────
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS rpt_mileage (
+    id             BIGSERIAL PRIMARY KEY,
+    account        TEXT,
+    imei           TEXT NOT NULL,
+    device_name    TEXT,
+    report_date    DATE,
+    total_mileage  NUMERIC,
+    run_time       INT,
+    idle_time      INT,
+    max_speed      NUMERIC,
+    avg_speed      NUMERIC,
+    fuel_consumed  NUMERIC,
+    raw_data       JSONB,
+    synced_at      TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unq_mileage_imei_date UNIQUE (imei, report_date)
+  );
+  CREATE INDEX IF NOT EXISTS idx_rpt_mileage_imei    ON rpt_mileage(imei);
+  CREATE INDEX IF NOT EXISTS idx_rpt_mileage_account ON rpt_mileage(account);
+  CREATE INDEX IF NOT EXISTS idx_rpt_mileage_date    ON rpt_mileage(report_date);
+
+  CREATE TABLE IF NOT EXISTS rpt_trips (
+    id            BIGSERIAL PRIMARY KEY,
+    account       TEXT,
+    imei          TEXT NOT NULL,
+    device_name   TEXT,
+    trip_id       TEXT,
+    start_time    TIMESTAMPTZ,
+    end_time      TIMESTAMPTZ,
+    start_lat     NUMERIC,
+    start_lng     NUMERIC,
+    start_addr    TEXT,
+    end_lat       NUMERIC,
+    end_lng       NUMERIC,
+    end_addr      TEXT,
+    distance_km   NUMERIC,
+    duration_min  INT,
+    avg_speed     NUMERIC,
+    max_speed     NUMERIC,
+    raw_data      JSONB,
+    synced_at     TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unq_trip_imei_start UNIQUE (imei, start_time)
+  );
+  CREATE INDEX IF NOT EXISTS idx_rpt_trips_imei    ON rpt_trips(imei);
+  CREATE INDEX IF NOT EXISTS idx_rpt_trips_account ON rpt_trips(account);
+  CREATE INDEX IF NOT EXISTS idx_rpt_trips_start   ON rpt_trips(start_time);
+
+  CREATE TABLE IF NOT EXISTS rpt_parking (
+    id            BIGSERIAL PRIMARY KEY,
+    account       TEXT,
+    imei          TEXT NOT NULL,
+    device_name   TEXT,
+    start_time    TIMESTAMPTZ,
+    end_time      TIMESTAMPTZ,
+    duration_min  INT,
+    acc_status    TEXT,
+    lat           NUMERIC,
+    lng           NUMERIC,
+    address       TEXT,
+    raw_data      JSONB,
+    synced_at     TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unq_parking_imei_start UNIQUE (imei, start_time)
+  );
+  CREATE INDEX IF NOT EXISTS idx_rpt_parking_imei    ON rpt_parking(imei);
+  CREATE INDEX IF NOT EXISTS idx_rpt_parking_account ON rpt_parking(account);
+  CREATE INDEX IF NOT EXISTS idx_rpt_parking_start   ON rpt_parking(start_time);
+
+  CREATE TABLE IF NOT EXISTS rpt_alarms (
+    id          BIGSERIAL PRIMARY KEY,
+    account     TEXT,
+    imei        TEXT NOT NULL,
+    device_name TEXT,
+    alarm_id    TEXT,
+    alarm_type  TEXT,
+    alarm_code  TEXT,
+    alarm_time  TIMESTAMPTZ,
+    severity    TEXT,
+    lat         NUMERIC,
+    lng         NUMERIC,
+    address     TEXT,
+    speed       NUMERIC,
+    raw_data    JSONB,
+    synced_at   TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unq_alarm_imei_time_type UNIQUE (imei, alarm_time, alarm_code)
+  );
+  CREATE INDEX IF NOT EXISTS idx_rpt_alarms_imei    ON rpt_alarms(imei);
+  CREATE INDEX IF NOT EXISTS idx_rpt_alarms_account ON rpt_alarms(account);
+  CREATE INDEX IF NOT EXISTS idx_rpt_alarms_time    ON rpt_alarms(alarm_time);
+
+  CREATE TABLE IF NOT EXISTS rpt_geofence_duration (
+    id              BIGSERIAL PRIMARY KEY,
+    account         TEXT,
+    imei            TEXT NOT NULL,
+    device_name     TEXT,
+    fence_id        TEXT,
+    fence_name      TEXT,
+    enter_time      TIMESTAMPTZ,
+    exit_time       TIMESTAMPTZ,
+    dwell_min       INT,
+    alert_type      TEXT,
+    raw_data        JSONB,
+    synced_at       TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unq_gfdur_imei_fence_enter UNIQUE (imei, fence_id, enter_time)
+  );
+  CREATE INDEX IF NOT EXISTS idx_rpt_gfdur_imei    ON rpt_geofence_duration(imei);
+  CREATE INDEX IF NOT EXISTS idx_rpt_gfdur_account ON rpt_geofence_duration(account);
+  CREATE INDEX IF NOT EXISTS idx_rpt_gfdur_fence   ON rpt_geofence_duration(fence_id);
+
+  CREATE TABLE IF NOT EXISTS rpt_obd (
+    id              BIGSERIAL PRIMARY KEY,
+    account         TEXT,
+    imei            TEXT NOT NULL,
+    device_name     TEXT,
+    report_time     TIMESTAMPTZ,
+    odometer        NUMERIC,
+    fuel_level      NUMERIC,
+    coolant_temp    NUMERIC,
+    battery_voltage NUMERIC,
+    rpm             INT,
+    speed           NUMERIC,
+    dtc_count       INT DEFAULT 0,
+    raw_data        JSONB,
+    synced_at       TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unq_obd_imei_time UNIQUE (imei, report_time)
+  );
+  CREATE INDEX IF NOT EXISTS idx_rpt_obd_imei    ON rpt_obd(imei);
+  CREATE INDEX IF NOT EXISTS idx_rpt_obd_account ON rpt_obd(account);
+  CREATE INDEX IF NOT EXISTS idx_rpt_obd_time    ON rpt_obd(report_time);
+`).catch(err => console.error('Error initializing report tables:', err))
+
+// ─── Report Upsert Helpers ────────────────────────────────────────────────────
+
+/** Bulk upsert mileage report records */
+export async function upsertMileageReport(rows: {
+  account?: string | null
+  imei: string
+  deviceName?: string | null
+  date: string            // YYYY-MM-DD
+  totalMileage?: number | null
+  runTime?: number | null
+  idleTime?: number | null
+  maxSpeed?: number | null
+  avgSpeed?: number | null
+  fuelConsumed?: number | null
+  raw?: any
+}[]) {
+  if (!rows.length) return { count: 0 }
+  let inserted = 0
+  for (const r of rows) {
+    await pool.query(
+      `INSERT INTO rpt_mileage
+         (account, imei, device_name, report_date, total_mileage, run_time, idle_time, max_speed, avg_speed, fuel_consumed, raw_data, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+       ON CONFLICT (imei, report_date) DO UPDATE SET
+         account       = EXCLUDED.account,
+         device_name   = EXCLUDED.device_name,
+         total_mileage = EXCLUDED.total_mileage,
+         run_time      = EXCLUDED.run_time,
+         idle_time     = EXCLUDED.idle_time,
+         max_speed     = EXCLUDED.max_speed,
+         avg_speed     = EXCLUDED.avg_speed,
+         fuel_consumed = EXCLUDED.fuel_consumed,
+         raw_data      = EXCLUDED.raw_data,
+         synced_at     = NOW()`,
+      [
+        r.account ?? null,
+        r.imei,
+        r.deviceName ?? null,
+        r.date,
+        r.totalMileage ?? null,
+        r.runTime ?? null,
+        r.idleTime ?? null,
+        r.maxSpeed ?? null,
+        r.avgSpeed ?? null,
+        r.fuelConsumed ?? null,
+        r.raw ? JSON.stringify(r.raw) : null,
+      ]
+    )
+    inserted++
+  }
+  return { count: inserted }
+}
+
+/** Bulk upsert trip report records */
+export async function upsertTripsReport(rows: {
+  account?: string | null
+  imei: string
+  deviceName?: string | null
+  tripId?: string | null
+  startTime: string
+  endTime?: string | null
+  startLat?: number | null
+  startLng?: number | null
+  startAddress?: string | null
+  endLat?: number | null
+  endLng?: number | null
+  endAddress?: string | null
+  distanceKm?: number | null
+  durationMin?: number | null
+  avgSpeed?: number | null
+  maxSpeed?: number | null
+  raw?: any
+}[]) {
+  if (!rows.length) return { count: 0 }
+  let inserted = 0
+  for (const r of rows) {
+    await pool.query(
+      `INSERT INTO rpt_trips
+         (account, imei, device_name, trip_id, start_time, end_time, start_lat, start_lng, start_addr,
+          end_lat, end_lng, end_addr, distance_km, duration_min, avg_speed, max_speed, raw_data, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
+       ON CONFLICT (imei, start_time) DO UPDATE SET
+         account      = EXCLUDED.account,
+         device_name  = EXCLUDED.device_name,
+         trip_id      = EXCLUDED.trip_id,
+         end_time     = EXCLUDED.end_time,
+         start_lat    = EXCLUDED.start_lat,
+         start_lng    = EXCLUDED.start_lng,
+         start_addr   = EXCLUDED.start_addr,
+         end_lat      = EXCLUDED.end_lat,
+         end_lng      = EXCLUDED.end_lng,
+         end_addr     = EXCLUDED.end_addr,
+         distance_km  = EXCLUDED.distance_km,
+         duration_min = EXCLUDED.duration_min,
+         avg_speed    = EXCLUDED.avg_speed,
+         max_speed    = EXCLUDED.max_speed,
+         raw_data     = EXCLUDED.raw_data,
+         synced_at    = NOW()`,
+      [
+        r.account ?? null,
+        r.imei,
+        r.deviceName ?? null,
+        r.tripId ?? null,
+        r.startTime,
+        r.endTime ?? null,
+        r.startLat ?? null,
+        r.startLng ?? null,
+        r.startAddress ?? null,
+        r.endLat ?? null,
+        r.endLng ?? null,
+        r.endAddress ?? null,
+        r.distanceKm ?? null,
+        r.durationMin ?? null,
+        r.avgSpeed ?? null,
+        r.maxSpeed ?? null,
+        r.raw ? JSON.stringify(r.raw) : null,
+      ]
+    )
+    inserted++
+  }
+  return { count: inserted }
+}
+
+/** Bulk upsert parking report records */
+export async function upsertParkingReport(rows: {
+  account?: string | null
+  imei: string
+  deviceName?: string | null
+  startTime: string
+  endTime?: string | null
+  durationMin?: number | null
+  accStatus?: string | null
+  lat?: number | null
+  lng?: number | null
+  address?: string | null
+  raw?: any
+}[]) {
+  if (!rows.length) return { count: 0 }
+  let inserted = 0
+  for (const r of rows) {
+    await pool.query(
+      `INSERT INTO rpt_parking
+         (account, imei, device_name, start_time, end_time, duration_min, acc_status, lat, lng, address, raw_data, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+       ON CONFLICT (imei, start_time) DO UPDATE SET
+         account      = EXCLUDED.account,
+         device_name  = EXCLUDED.device_name,
+         end_time     = EXCLUDED.end_time,
+         duration_min = EXCLUDED.duration_min,
+         acc_status   = EXCLUDED.acc_status,
+         lat          = EXCLUDED.lat,
+         lng          = EXCLUDED.lng,
+         address      = EXCLUDED.address,
+         raw_data     = EXCLUDED.raw_data,
+         synced_at    = NOW()`,
+      [
+        r.account ?? null,
+        r.imei,
+        r.deviceName ?? null,
+        r.startTime,
+        r.endTime ?? null,
+        r.durationMin ?? null,
+        r.accStatus ?? null,
+        r.lat ?? null,
+        r.lng ?? null,
+        r.address ?? null,
+        r.raw ? JSON.stringify(r.raw) : null,
+      ]
+    )
+    inserted++
+  }
+  return { count: inserted }
+}
+
+/** Bulk upsert alarm report records */
+export async function upsertAlarmReport(rows: {
+  account?: string | null
+  imei: string
+  deviceName?: string | null
+  alarmId?: string | null
+  alarmType?: string | null
+  alarmCode?: string | null
+  alarmTime: string
+  severity?: string | null
+  lat?: number | null
+  lng?: number | null
+  address?: string | null
+  speed?: number | null
+  raw?: any
+}[]) {
+  if (!rows.length) return { count: 0 }
+  let inserted = 0
+  for (const r of rows) {
+    await pool.query(
+      `INSERT INTO rpt_alarms
+         (account, imei, device_name, alarm_id, alarm_type, alarm_code, alarm_time, severity, lat, lng, address, speed, raw_data, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+       ON CONFLICT (imei, alarm_time, alarm_code) DO UPDATE SET
+         account     = EXCLUDED.account,
+         device_name = EXCLUDED.device_name,
+         alarm_id    = EXCLUDED.alarm_id,
+         alarm_type  = EXCLUDED.alarm_type,
+         severity    = EXCLUDED.severity,
+         lat         = EXCLUDED.lat,
+         lng         = EXCLUDED.lng,
+         address     = EXCLUDED.address,
+         speed       = EXCLUDED.speed,
+         raw_data    = EXCLUDED.raw_data,
+         synced_at   = NOW()`,
+      [
+        r.account ?? null,
+        r.imei,
+        r.deviceName ?? null,
+        r.alarmId ?? null,
+        r.alarmType ?? null,
+        r.alarmCode ?? 'UNKNOWN',
+        r.alarmTime,
+        r.severity ?? 'Warning',
+        r.lat ?? null,
+        r.lng ?? null,
+        r.address ?? null,
+        r.speed ?? null,
+        r.raw ? JSON.stringify(r.raw) : null,
+      ]
+    )
+    inserted++
+  }
+  return { count: inserted }
+}
+
+/** Bulk upsert geofence duration report records */
+export async function upsertGeofenceDuration(rows: {
+  account?: string | null
+  imei: string
+  deviceName?: string | null
+  fenceId?: string | null
+  fenceName?: string | null
+  enterTime: string
+  exitTime?: string | null
+  dwellMin?: number | null
+  alertType?: string | null
+  raw?: any
+}[]) {
+  if (!rows.length) return { count: 0 }
+  let inserted = 0
+  for (const r of rows) {
+    await pool.query(
+      `INSERT INTO rpt_geofence_duration
+         (account, imei, device_name, fence_id, fence_name, enter_time, exit_time, dwell_min, alert_type, raw_data, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+       ON CONFLICT (imei, fence_id, enter_time) DO UPDATE SET
+         account     = EXCLUDED.account,
+         device_name = EXCLUDED.device_name,
+         fence_name  = EXCLUDED.fence_name,
+         exit_time   = EXCLUDED.exit_time,
+         dwell_min   = EXCLUDED.dwell_min,
+         alert_type  = EXCLUDED.alert_type,
+         raw_data    = EXCLUDED.raw_data,
+         synced_at   = NOW()`,
+      [
+        r.account ?? null,
+        r.imei,
+        r.deviceName ?? null,
+        r.fenceId ?? 'unknown',
+        r.fenceName ?? null,
+        r.enterTime,
+        r.exitTime ?? null,
+        r.dwellMin ?? null,
+        r.alertType ?? null,
+        r.raw ? JSON.stringify(r.raw) : null,
+      ]
+    )
+    inserted++
+  }
+  return { count: inserted }
+}
+
+/** Bulk upsert OBD report records */
+export async function upsertOBDReport(rows: {
+  account?: string | null
+  imei: string
+  deviceName?: string | null
+  reportTime: string
+  odometer?: number | null
+  fuelLevel?: number | null
+  coolantTemp?: number | null
+  batteryVoltage?: number | null
+  rpm?: number | null
+  speed?: number | null
+  dtcCount?: number | null
+  raw?: any
+}[]) {
+  if (!rows.length) return { count: 0 }
+  let inserted = 0
+  for (const r of rows) {
+    await pool.query(
+      `INSERT INTO rpt_obd
+         (account, imei, device_name, report_time, odometer, fuel_level, coolant_temp, battery_voltage, rpm, speed, dtc_count, raw_data, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+       ON CONFLICT (imei, report_time) DO UPDATE SET
+         account         = EXCLUDED.account,
+         device_name     = EXCLUDED.device_name,
+         odometer        = EXCLUDED.odometer,
+         fuel_level      = EXCLUDED.fuel_level,
+         coolant_temp    = EXCLUDED.coolant_temp,
+         battery_voltage = EXCLUDED.battery_voltage,
+         rpm             = EXCLUDED.rpm,
+         speed           = EXCLUDED.speed,
+         dtc_count       = EXCLUDED.dtc_count,
+         raw_data        = EXCLUDED.raw_data,
+         synced_at       = NOW()`,
+      [
+        r.account ?? null,
+        r.imei,
+        r.deviceName ?? null,
+        r.reportTime,
+        r.odometer ?? null,
+        r.fuelLevel ?? null,
+        r.coolantTemp ?? null,
+        r.batteryVoltage ?? null,
+        r.rpm ?? null,
+        r.speed ?? null,
+        r.dtcCount ?? 0,
+        r.raw ? JSON.stringify(r.raw) : null,
+      ]
+    )
+    inserted++
+  }
+  return { count: inserted }
+}
+
+// ─── Report Query Helpers ─────────────────────────────────────────────────────
+
+/** Query any report table by imei + optional time range */
+export async function getReportFromDB(
+  type: 'mileage' | 'trips' | 'parking' | 'alarm' | 'geofence' | 'obd',
+  opts: { account?: string; imei?: string; fromTime?: string; toTime?: string; limit?: number }
+): Promise<any[]> {
+  const tableMap: Record<string, string> = {
+    mileage: 'rpt_mileage',
+    trips: 'rpt_trips',
+    parking: 'rpt_parking',
+    alarm: 'rpt_alarms',
+    geofence: 'rpt_geofence_duration',
+    obd: 'rpt_obd',
+  }
+  const timeColMap: Record<string, string> = {
+    mileage: 'report_date',
+    trips: 'start_time',
+    parking: 'start_time',
+    alarm: 'alarm_time',
+    geofence: 'enter_time',
+    obd: 'report_time',
+  }
+
+  const table = tableMap[type]
+  const timeCol = timeColMap[type]
+  const values: any[] = []
+  const conditions: string[] = []
+
+  if (opts.account) {
+    values.push(opts.account)
+    conditions.push(`account = $${values.length}`)
+  }
+  if (opts.imei) {
+    values.push(opts.imei)
+    conditions.push(`imei = $${values.length}`)
+  }
+  if (opts.fromTime) {
+    values.push(opts.fromTime)
+    conditions.push(`${timeCol} >= $${values.length}`)
+  }
+  if (opts.toTime) {
+    values.push(opts.toTime)
+    conditions.push(`${timeCol} <= $${values.length}`)
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const limit = opts.limit ?? 200
+  const res = await pool.query(
+    `SELECT * FROM ${table} ${where} ORDER BY ${timeCol} DESC LIMIT ${limit}`,
+    values
+  )
+  return res.rows
+}
+
+/** Get last synced_at for a given report type + imei */
+export async function getLastSyncedAt(
+  type: 'mileage' | 'trips' | 'parking' | 'alarm' | 'geofence' | 'obd',
+  imei?: string,
+  account?: string
+): Promise<Date | null> {
+  const tableMap: Record<string, string> = {
+    mileage: 'rpt_mileage',
+    trips: 'rpt_trips',
+    parking: 'rpt_parking',
+    alarm: 'rpt_alarms',
+    geofence: 'rpt_geofence_duration',
+    obd: 'rpt_obd',
+  }
+  const conditions: string[] = []
+  const values: any[] = []
+  if (imei) { values.push(imei); conditions.push(`imei = $${values.length}`) }
+  if (account) { values.push(account); conditions.push(`account = $${values.length}`) }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const res = await pool.query(
+    `SELECT MAX(synced_at) AS last FROM ${tableMap[type]} ${where}`,
+    values
+  )
+  return res.rows[0]?.last ?? null
+}
+
+

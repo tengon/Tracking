@@ -44,16 +44,26 @@ export default function GeofenceMap({ geofences, selected, onSelect, isDrawing, 
         const color = fence.fence_color || '#00D4FF'
         let shape: any
 
+        // Skip fence if coordinates are missing
+        if (!fence.coordinates) return
+
         if (fence.fence_type === 'circle') {
-          const [lat, lng] = fence.coordinates.split(',').map(Number)
+          const parts = fence.coordinates.split(',')
+          const lat = Number(parts[0])
+          const lng = Number(parts[1])
+          if (isNaN(lat) || isNaN(lng)) return
           shape = L.circle([lat, lng], {
             radius: Number(fence.radius || 500),
             color, fillColor: color, fillOpacity: 0.15, weight: 2,
           }).addTo(map)
           shape.bindPopup(`<b>${fence.fence_name}</b><br>Alert: ${fence.alert_type}<br>Radius: ${fence.radius}m`)
         } else {
-          const pts = fence.coordinates.split(';').map(p => p.split(',').map(Number) as [number, number])
-          shape = L.polygon(pts, { color, fillColor: color, fillOpacity: 0.15, weight: 2 }).addTo(map)
+          const rawPts = fence.coordinates
+            .split(';')
+            .map((p: string) => p.split(',').map(Number))
+            .filter((p: number[]) => p.length === 2 && !p.some(isNaN)) as [number, number][]
+          if (rawPts.length < 3) return  // polygon needs at least 3 points
+          shape = L.polygon(rawPts, { color, fillColor: color, fillOpacity: 0.15, weight: 2 }).addTo(map)
           shape.bindPopup(`<b>${fence.fence_name}</b><br>Alert: ${fence.alert_type}`)
         }
         shape.on('click', () => onSelect(fence))

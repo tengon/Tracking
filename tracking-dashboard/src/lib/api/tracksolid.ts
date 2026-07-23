@@ -1,6 +1,7 @@
 import CryptoJS from 'crypto-js'
 import https from 'https'
 import querystring from 'querystring'
+import { logApiActivity } from '@/lib/logger'
 
 const APP_KEY = process.env.JIMI_APP_KEY!
 const APP_SECRET = process.env.JIMI_APP_SECRET!
@@ -35,6 +36,7 @@ export async function jimiRequest<T>(
   method: string,
   privateParams: Record<string, string> = {}
 ): Promise<T> {
+  const startTime = Date.now()
   const common: Record<string, string> = {
     method,
     timestamp: utcTimestamp(),
@@ -61,21 +63,57 @@ export async function jimiRequest<T>(
       let data = ''
       res.on('data', chunk => { data += chunk })
       res.on('end', () => {
+        const durationMs = Date.now() - startTime
+        const statusCode = res.statusCode || 200
         try {
           const json = JSON.parse(data)
+
+          // Record API POST activity to log file
+          logApiActivity({
+            method: 'POST',
+            endpoint: method,
+            status: Number(json.code) === 0 ? statusCode : (json.code || statusCode),
+            durationMs,
+            request: allParams,
+            response: json,
+            ...(Number(json.code) !== 0 ? { error: `JIMI Error ${json.code}: ${json.message}` } : {}),
+          })
+
           if (Number(json.code) !== 0) {
             console.error('JIMI RAW ERROR RESPONSE:', data)
             return reject(new Error(`JIMI API Error ${json.code}: ${json.message || JSON.stringify(json)}`))
           }
           resolve(json)
-        } catch (e) {
+        } catch (e: any) {
+          logApiActivity({
+            method: 'POST',
+            endpoint: method,
+            status: 500,
+            durationMs,
+            request: allParams,
+            response: data,
+            error: `Invalid JSON response: ${e.message}`,
+          })
           console.error('JIMI NON-JSON RESPONSE:', data)
           reject(new Error(`Invalid JSON response: ${data}`))
         }
       })
     })
 
-    req.on('error', err => reject(err))
+    req.on('error', err => {
+      const durationMs = Date.now() - startTime
+      logApiActivity({
+        method: 'POST',
+        endpoint: method,
+        status: 500,
+        durationMs,
+        request: allParams,
+        response: null,
+        error: err.message,
+      })
+      reject(err)
+    })
+
     req.write(postData)
     req.end()
   })
@@ -244,6 +282,12 @@ export async function getTrackList(
   })
 }
 
+/**
+ * 7.17 Get the mileage data of devices
+ * Method: jimi.device.track.mileage
+ * Params: imeis (comma-separated, max 100), begin_time, end_time
+ * Format: yyyy-MM-dd HH:mm:ss
+ */
 export async function getMileageData(
   accessToken: string, imeis: string, beginTime: string, endTime: string
 ) {
@@ -255,9 +299,42 @@ export async function getMileageData(
   })
 }
 
+/**
+ * 7.51 Get the trips report data of devices
+ * Method: jimi.open.platform.report.trips
+ * Params: account, imeis, start_time, end_time, start_row (>=0), page_size (1-100)
+ * Response: data.dayList[] or data.datDatas[]
+ *   dayList[].tripsData[].dayData[] contains: imei, startTime, endTime,
+ *   startLat, startLng, endLat, endLng, totalMileage, travelTime,
+ *   averageSpeed, maxSpeed, oilWear, fuel, startMileage, endMileage
+ */
+export async function getTripsReport(
+  accessToken: string, account: string, imeis: string,
+  startTime: string, endTime: string, startRow = '0', pageSize = '100'
+) {
+  return jimiRequest('jimi.open.platform.report.trips', {
+    access_token: accessToken,
+    account,
+    imeis,
+    start_time: startTime,
+    end_time: endTime,
+    start_row: startRow,
+    page_size: pageSize,
+  })
+}
+
+/**
+ * 7.40 Get parking/idling data of devices
+ * Method: jimi.open.platform.report.parking
+ * Params: account, imeis, start_time, end_time, acc_type ('on'=idling/'off'=parking),
+ *         start_row (>=0), page_size (1-100)
+ * Response: data.rows[] — imei, deviceName, startTime, endTime,
+ *   durSecond, acc, lat, lng, addr
+ */
 export async function getParkingData(
   accessToken: string, account: string, imeis: string,
-  startTime: string, endTime: string, accType: 'on' | 'off' = 'off'
+  startTime: string, endTime: string, accType: 'on' | 'off' = 'off',
+  startRow = '0', pageSize = '100'
 ) {
   return jimiRequest('jimi.open.platform.report.parking', {
     access_token: accessToken,
@@ -265,8 +342,8 @@ export async function getParkingData(
     imeis,
     start_time: startTime,
     end_time: endTime,
-    start_row: '0',
-    page_size: '50',
+    start_row: startRow,
+    page_size: pageSize,
     acc_type: accType,
   })
 }
@@ -281,6 +358,31 @@ export async function getGeofenceList(
     page_no: String(pageNo),
     page_size: String(pageSize),
   })
+}
+
+/**
+ * 7.52 Get entry and exit fence data of devices
+ * Method: jimi.open.platform.fence.duration
+ * Params: account, imeis, start_time, end_time, start_row, page_size
+ *         fence_id (optional — filter by specific fence)
+ * Response: data.rows[] — imei, deviceName, fenceName, enterTime, exitTime, duration (seconds)
+ */
+export async function getFenceDurationReport(
+  accessToken: string, account: string, imeis: string,
+  startTime: string, endTime: string, fenceId = '', startRow = '0', pageSize = '100'
+) {
+  const params: Record<string, string> = {
+    access_token: accessToken,
+    account,
+    imeis,
+    start_time: startTime,
+    end_time: endTime,
+    start_row: startRow,
+    page_size: pageSize,
+  }
+  // Only include fence_id if specified (empty string causes API error on some regions)
+  if (fenceId) params.fence_id = fenceId
+  return jimiRequest('jimi.open.platform.fence.duration', params)
 }
 
 export async function createPlatformFence(
@@ -310,31 +412,53 @@ export async function bindFenceToDevice(accessToken: string, fenceId: string, im
 }
 
 // ─── Alarms ───────────────────────────────────────────────────────────────────
+/**
+ * 7.32 Get device alarm list
+ * Method: jimi.device.alarm.list
+ * Params: imei (SINGLE imei only), begin_time, end_time
+ *         page_no (>=1, default 1), page_size (1-100, default 10)
+ * Response: result.result[] — imei, alarmTime, alarmType, alertTypeId,
+ *   lat, lng, speed, address, deviceName
+ * Note: alertTypeId is the numeric/text alarm code. See Appendix 8.1 for full list.
+ */
 export async function getAlarmList(
-  accessToken: string, imei: string, beginTime: string, endTime: string
+  accessToken: string, imei: string, beginTime: string, endTime: string,
+  pageNo = '1', pageSize = '100'
 ) {
   return jimiRequest('jimi.device.alarm.list', {
     access_token: accessToken,
     imei,
     begin_time: beginTime,
     end_time: endTime,
-    start_row: '0',
-    page_size: '50',
+    page_no: pageNo,
+    page_size: pageSize,
   })
 }
 
 // ─── OBD ──────────────────────────────────────────────────────────────────────
+/**
+ * 7.53 Get the OBD data of devices
+ * Method: jimi.device.obd.list
+ * Params: account, imeis (comma-separated, max 100), start_time, end_time
+ *         page_no (>=1, default 1), page_size (1-100, default 10)
+ * Response: data.result[] — imei, dataReportTime, odometerReading,
+ *   deviceAccumulatedMileage, remainingFuel, remainingFuelPercentage,
+ *   coolantTemperature, vehicleBatterVoltage, currentRPM, currentSpeed, vin
+ */
 export async function getOBDData(
-  accessToken: string, imei: string, beginTime: string, endTime: string
+  accessToken: string, imeis: string, startTime: string, endTime: string,
+  account = '', pageNo = '1', pageSize = '100'
 ) {
-  return jimiRequest('jimi.device.obd.list', {
+  const params: Record<string, string> = {
     access_token: accessToken,
-    imei,
-    begin_time: beginTime,
+    imeis,           // spec uses 'imeis' (comma-separated), NOT 'imei'
+    start_time: startTime,
     end_time: endTime,
-    page_no: '0',
-    page_size: '20',
-  })
+    page_no: pageNo,
+    page_size: pageSize,
+  }
+  if (account) params.account = account
+  return jimiRequest('jimi.device.obd.list', params)
 }
 
 // ─── Media ────────────────────────────────────────────────────────────────────

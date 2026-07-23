@@ -88,10 +88,13 @@ export default function LiveMap({ devices, selected, onSelect }: Props) {
         const color    = device.customColor || defaultColor
         const bg       = `${color}30` // Use hex + alpha
 
+        const deviceLabel = device.deviceName || device.imei || ''
+        const shortLabel  = deviceLabel.length > 14 ? deviceLabel.slice(0, 14) + '…' : deviceLabel
+
         const icon = L.divIcon({
           className: '',
           html: `
-            <div style="position:relative;width:40px;height:40px">
+            <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:3px">
               <div style="
                 width:40px;height:40px;border-radius:50%;
                 background:${bg};
@@ -99,18 +102,34 @@ export default function LiveMap({ devices, selected, onSelect }: Props) {
                 display:flex;align-items:center;justify-content:center;
                 font-size:18px;
                 box-shadow:0 0 12px ${color}80, 0 2px 8px rgba(0,0,0,0.5);
-              ">🚗</div>
-              ${isMoving ? `<div style="
+                position:relative;
+              ">🚗${isMoving ? `<div style="
                 position:absolute;top:0;right:0;
                 width:11px;height:11px;
                 background:${color};border-radius:50%;
                 border:2px solid #0d1520;
                 animation:blink 1s infinite;
-              "></div>` : ''}
+              "></div>` : ''}</div>
+              <div style="
+                white-space:nowrap;
+                font-size:10px;
+                font-weight:700;
+                font-family:Inter,system-ui,sans-serif;
+                color:#fff;
+                background:rgba(10,10,20,0.78);
+                border:1px solid ${color}60;
+                border-radius:20px;
+                padding:1px 7px;
+                letter-spacing:0.02em;
+                line-height:1.4;
+                backdrop-filter:blur(6px);
+                box-shadow:0 2px 6px rgba(0,0,0,0.45);
+                pointer-events:none;
+              ">${shortLabel}</div>
             </div>`,
-          iconSize: [40, 40],
-          iconAnchor: [20, 20],
-          popupAnchor: [0, -24],
+          iconSize: [80, 62],
+          iconAnchor: [40, 40],
+          popupAnchor: [0, -44],
         })
 
         const popup = `
@@ -138,7 +157,10 @@ export default function LiveMap({ devices, selected, onSelect }: Props) {
               </div>
             </div>
             <!--ADDR_${device.imei}-->
-            <div style="margin-top:10px;font-size:10px;color:#94A3B8">📅 ${device.gpsTime?.slice(0,16) || '—'}</div>
+            <div style="margin-top:10px;font-size:10px;color:#94A3B8">📅 ${device.gpsTime
+              ? (() => { try { return new Date(device.gpsTime.replace(' ', 'T') + 'Z').toLocaleString(undefined, { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }) } catch { return device.gpsTime.slice(0,16) } })()
+              : '—'
+            }</div>
           </div>
         `
 

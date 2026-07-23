@@ -32,10 +32,32 @@ export default function AlarmsPage() {
     }
   }, [])
 
+  // ── Auto-refresh: hanya aktif saat tab Alarms terlihat ──────────────────
   useEffect(() => {
-    fetchAlarms()
-    const iv = setInterval(fetchAlarms, 10000) // auto-refresh every 10s
-    return () => clearInterval(iv)
+    let iv: NodeJS.Timeout | null = null
+
+    const startPolling = () => {
+      if (iv) return
+      fetchAlarms()
+      iv = setInterval(fetchAlarms, 10000)
+    }
+
+    const stopPolling = () => {
+      if (iv) { clearInterval(iv); iv = null }
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') startPolling()
+      else stopPolling()
+    }
+
+    if (document.visibilityState === 'visible') startPolling()
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      stopPolling()
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [fetchAlarms])
 
   // Compute counts
