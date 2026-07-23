@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync": "npx tsx scripts/sync-device-details.ts"
   },
   "dependencies": {
     "@types/pg": "^8.20.0",

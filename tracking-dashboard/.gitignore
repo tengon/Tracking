@@ -43,3 +43,6 @@ next-env.d.ts
 data/*.db
 
 Docs/*.*
+
+# Docker database backup (contains sensitive data)
+docker/backup.dump

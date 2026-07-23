@@ -1,0 +1,35 @@
+# Version control
+.git
+.gitignore
+
+# Dependencies (akan di-install ulang di container)
+node_modules
+
+# Next.js build output (akan di-build di dalam container)
+.next
+
+# Environment files (jangan masuk ke image)
+.env.local
+.env*.local
+
+# Logs & debug
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode
+.idea
+*.swp
+
+# Docker backup dump (besar, hanya dibutuhkan saat restore)
+docker/backup.dump
+
+# Docs & misc
+Docs/
+README.md
+*.txt
+tree-debug.json
