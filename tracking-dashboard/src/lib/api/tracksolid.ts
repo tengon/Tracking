@@ -3,31 +3,28 @@ import https from 'https'
 import querystring from 'querystring'
 import { logApiActivity } from '@/lib/logger'
 
-const APP_KEY = process.env.JIMI_APP_KEY!
-const APP_SECRET = process.env.JIMI_APP_SECRET!
-const BASE_URL = process.env.JIMI_BASE_URL || 'https://hk-open.tracksolidpro.com/route/rest'
-
-// Persistent HTTPS Agent to prevent connection timeouts on Windows
-const httpsAgent = new https.Agent({ keepAlive: true, family: 4 })
-
 // ─── Signature Generator ─────────────────────────────────────────────────────
 export function generateSign(params: Record<string, string>): string {
+  const appSecret = process.env.JIMI_APP_SECRET || ''
   const sorted = Object.keys(params)
     .filter(k => k !== 'sign' && params[k] != null && params[k] !== '')
     .sort()
 
-  let str = APP_SECRET
+  let str = appSecret
   sorted.forEach(key => { str += key + params[key] })
-  str += APP_SECRET
+  str += appSecret
 
   return CryptoJS.MD5(str).toString().toUpperCase()
 }
+
+// Persistent HTTPS Agent to prevent connection timeouts on Windows
+const httpsAgent = new https.Agent({ keepAlive: true, family: 4 })
 
 // ─── UTC Timestamp ────────────────────────────────────────────────────────────
 function utcTimestamp(): string {
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ` +
+  return `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ` +
     `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`
 }
 
@@ -37,10 +34,13 @@ export async function jimiRequest<T>(
   privateParams: Record<string, string> = {}
 ): Promise<T> {
   const startTime = Date.now()
+  const appKey = process.env.JIMI_APP_KEY || ''
+  const baseUrl = process.env.JIMI_BASE_URL || 'https://hk-open.tracksolidpro.com/route/rest'
+
   const common: Record<string, string> = {
     method,
     timestamp: utcTimestamp(),
-    app_key: APP_KEY,
+    app_key: appKey,
     sign_method: 'md5',
     v: '1.0',
     format: 'json',
@@ -52,7 +52,7 @@ export async function jimiRequest<T>(
   const postData = querystring.stringify(allParams)
 
   return new Promise((resolve, reject) => {
-    const req = https.request(BASE_URL, {
+    const req = https.request(baseUrl, {
       method: 'POST',
       agent: httpsAgent,
       headers: {
@@ -119,12 +119,30 @@ export async function jimiRequest<T>(
   })
 }
 
-// ─── Token Management ─────────────────────────────────────────────────────────
+// ─── Token Management & Caching ──────────────────────────────────────────────
+const tokenCache = new Map<string, { data: any; expiresAt: number }>()
+
 export async function getToken(userId: string, passwordMd5: string, expiresIn = 7200) {
-  return jimiRequest<{ result: { accessToken: string; refreshToken: string; expiresIn: number; account: string; appKey: string; time: string } }>(
+  const cacheKey = `token_${userId}`
+  const cached = tokenCache.get(cacheKey)
+  const now = Date.now()
+
+  // Return cached token if still valid (reserve 5 minutes safety buffer)
+  if (cached && cached.expiresAt > now + 300000) {
+    return cached.data
+  }
+
+  const res = await jimiRequest<{ result: { accessToken: string; refreshToken: string; expiresIn: number; account: string; appKey: string; time: string } }>(
     'jimi.oauth.token.get',
     { user_id: userId, user_pwd_md5: passwordMd5, expires_in: String(expiresIn) }
   )
+
+  if ((res as any)?.code === 0 && (res as any)?.result?.accessToken) {
+    const expiresMs = (res.result.expiresIn || expiresIn || 7200) * 1000
+    tokenCache.set(cacheKey, { data: res, expiresAt: now + expiresMs })
+  }
+
+  return res
 }
 
 export async function refreshToken(accessToken: string, refreshTok: string, expiresIn = 7200) {
@@ -158,29 +176,29 @@ export async function getChildAccountsDirect(accessToken: string, target: string
 export async function createChildAccount(accessToken: string, params: CreateAccountParams) {
   return jimiRequest('jimi.user.child.create', {
     access_token: accessToken,
-    child_account:   params.account,
+    child_account: params.account,
     child_user_name: params.name,
-    child_user_pwd:  params.passwordMd5,
-    child_email:     params.email     ?? '',
-    child_phone:     params.phone     ?? '',
-    company_name:    params.companyName ?? '',
+    child_user_pwd: params.passwordMd5,
+    child_email: params.email ?? '',
+    child_phone: params.phone ?? '',
+    company_name: params.companyName ?? '',
   })
 }
 
 export async function updateChildAccount(accessToken: string, params: UpdateAccountParams) {
   return jimiRequest('jimi.user.child.update', {
     access_token: accessToken,
-    child_account:   params.account,
-    child_user_name: params.name        ?? '',
-    child_email:     params.email       ?? '',
-    child_phone:     params.phone       ?? '',
-    company_name:    params.companyName ?? '',
+    child_account: params.account,
+    child_user_name: params.name ?? '',
+    child_email: params.email ?? '',
+    child_phone: params.phone ?? '',
+    company_name: params.companyName ?? '',
   })
 }
 
 export async function deleteChildAccount(accessToken: string, childAccount: string) {
   return jimiRequest('jimi.user.child.del', {
-    access_token:  accessToken,
+    access_token: accessToken,
     child_account: childAccount,
   })
 }
@@ -189,8 +207,8 @@ export async function moveChildAccount(
   accessToken: string, childAccount: string, newParent: string
 ) {
   return jimiRequest('jimi.user.child.move', {
-    access_token:   accessToken,
-    child_account:  childAccount,
+    access_token: accessToken,
+    child_account: childAccount,
     target_account: newParent,
   })
 }
@@ -213,19 +231,19 @@ export interface SubAccount {
 }
 
 export interface CreateAccountParams {
-  account:     string
-  name:        string
+  account: string
+  name: string
   passwordMd5: string
-  email?:      string
-  phone?:      string
+  email?: string
+  phone?: string
   companyName?: string
 }
 
 export interface UpdateAccountParams {
-  account:     string
-  name?:       string
-  email?:      string
-  phone?:      string
+  account: string
+  name?: string
+  email?: string
+  phone?: string
   companyName?: string
 }
 

@@ -1,19 +1,29 @@
 import fs from 'fs'
 import path from 'path'
 
-// Load .env.local BEFORE any other imports
-const envPath = path.join(process.cwd(), '.env.local')
-if (fs.existsSync(envPath)) {
-  const envConfig = fs.readFileSync(envPath, 'utf8')
-  for (const line of envConfig.split('\n')) {
+// Load env files for local development.
+// In Docker, env vars are injected by docker-compose — Docker env takes precedence.
+function loadEnvFile(filename: string) {
+  const envPath = path.join(process.cwd(), filename)
+  if (!fs.existsSync(envPath)) return
+  const content = fs.readFileSync(envPath, 'utf8')
+  for (const line of content.split('\n')) {
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#')) continue
-    const [key, ...vals] = trimmed.split('=')
-    if (key && vals.length > 0) {
-      process.env[key.trim()] = vals.join('=').trim()
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx < 1) continue
+    const key = trimmed.slice(0, eqIdx).trim()
+    const val = trimmed.slice(eqIdx + 1).trim()
+    // Only set if not already defined (Docker env takes precedence)
+    if (key && !(key in process.env)) {
+      process.env[key] = val
     }
   }
 }
+
+// Try .env.local first (local dev), then .env (shared/Docker fallback)
+loadEnvFile('.env.local')
+loadEnvFile('.env')
 
 import CryptoJS from 'crypto-js'
 
