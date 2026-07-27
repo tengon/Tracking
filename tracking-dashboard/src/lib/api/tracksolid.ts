@@ -218,16 +218,18 @@ export interface SubAccount {
   account: string
   name: string
   type: number
-  email: string
-  phone: string
-  companyName: string
-  language: string
-  enabledFlag: number
+  displayFlag: number
   address: string | null
   birth: string | null
+  companyName: string
+  email: string
+  phone: string
+  language: string
   sex: number
+  enabledFlag: number
   remark: string | null
-  displayFlag: number
+  userId?: string | null
+  parentId?: string | null
 }
 
 export interface CreateAccountParams {
@@ -279,11 +281,12 @@ export async function getAllDeviceLocations(
 }
 
 export async function getDeviceLocation(
-  accessToken: string, imeis: string, mapType = 'GOOGLE'
+  accessToken: string, imeis: string | string[], mapType = 'GOOGLE'
 ) {
+  const imeisParam = Array.isArray(imeis) ? imeis.join(',') : imeis
   return jimiRequest('jimi.device.location.get', {
     access_token: accessToken,
-    imeis,
+    imeis: imeisParam,
     map_type: mapType,
   })
 }

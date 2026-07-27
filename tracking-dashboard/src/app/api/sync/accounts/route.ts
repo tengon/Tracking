@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getChildAccountsDirect } from '@/lib/api/tracksolid'
 import { upsertAccount, hasAccountData } from '@/lib/db/postgres'
+import { clearTreeCache } from '@/app/api/users/tree/route'
 
 /**
  * JIMI `jimi.user.child.list` returns ALL descendants flat in one call.
@@ -47,7 +48,11 @@ async function syncFromFlatList(
   if (rootUserId) userIdToAccount.set(rootUserId, rootAccount)
 
   // Upsert root account first
-  await upsertAccount({ account: rootAccount, parent_account: null })
+  await upsertAccount({
+    account: rootAccount,
+    parent_account: null,
+    user_id: rootUserId,
+  })
 
   const synced: string[] = [rootAccount]
 
@@ -62,6 +67,16 @@ async function syncFromFlatList(
       email: c.email,
       phone: c.phone,
       type: c.type,
+      display_flag: c.displayFlag,
+      address: c.address,
+      birth: c.birth,
+      language: c.language,
+      sex: c.sex,
+      enabled_flag: c.enabledFlag,
+      remark: c.remark,
+      user_id: c.userId ? String(c.userId) : null,
+      parent_id: c.parentId ? String(c.parentId) : null,
+      raw_detail: c,
     })
     synced.push(c.account)
   }
@@ -87,6 +102,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { total, accounts } = await syncFromFlatList(accessToken, target)
+    clearTreeCache()
 
     return NextResponse.json({ success: true, total_synced: total, accounts })
   } catch (e: any) {

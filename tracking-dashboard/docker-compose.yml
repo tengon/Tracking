@@ -7,24 +7,24 @@ services:
     container_name: tracking_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: bitauto123
-      POSTGRES_DB: tracking_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bitauto123}
+      POSTGRES_DB: ${POSTGRES_DB:-tracking_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Init SQL scripts — dijalankan sekali saat volume kosong
+      # Init SQL scripts — runs once on empty volume initialization
       - ./docker/initdb:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tracking_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tracking_db}"]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 20s
 
   # ─────────────────────────────────────────────
-  # Next.js Dashboard App
+  # Next.js Dashboard Application
   # ─────────────────────────────────────────────
   app:
     build:
@@ -35,30 +35,56 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # TrackSolid API
+      # TrackSolid API Credentials
       JIMI_BASE_URL: ${JIMI_BASE_URL}
       JIMI_APP_KEY: ${JIMI_APP_KEY}
       JIMI_APP_SECRET: ${JIMI_APP_SECRET}
       JIMI_ACCOUNT: ${JIMI_ACCOUNT}
       JIMI_PASSWORD_MD5: ${JIMI_PASSWORD_MD5}
-      # Auth
+      # Authentication
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
-      # Database — pakai hostname service "postgres"
-      DATABASE_URL: postgresql://postgres:bitauto123@postgres:5432/tracking_db
+      # Database connection
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:bitauto123@postgres:5432/tracking_db}
       NODE_ENV: production
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      # SQLite data persisten
-      - sqlite_data:/app/data
-      # Log file persisten
-      - logs_data:/app/logs
+      # Local directory mounts for persistent SQLite database and API log files
+      - ./data:/app/data
+      - ./logs:/app/logs
 
   # ─────────────────────────────────────────────
-  # DB Restore (hanya jalan sekali, saat restore data)
-  # Jalankan manual: docker compose run --rm db-restore
+  # MQTT Location Streamer Worker
+  # ─────────────────────────────────────────────
+  mqtt-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tracking_mqtt_worker
+    restart: unless-stopped
+    command: ["npx", "tsx", "scripts/mqtt-publisher.ts"]
+    environment:
+      JIMI_BASE_URL: ${JIMI_BASE_URL}
+      JIMI_APP_KEY: ${JIMI_APP_KEY}
+      JIMI_APP_SECRET: ${JIMI_APP_SECRET}
+      JIMI_ACCOUNT: ${JIMI_ACCOUNT}
+      JIMI_PASSWORD_MD5: ${JIMI_PASSWORD_MD5}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-mqtt://36.92.47.218:14583}
+      NODE_ENV: production
+    volumes:
+      - ./logs:/app/logs
+
+  # ─────────────────────────────────────────────
+  # Database Manual Restore Utility
+  # Run manually: docker compose run --rm db-restore
   # ─────────────────────────────────────────────
   db-restore:
     image: postgres:16-alpine
@@ -66,7 +92,7 @@ services:
     profiles:
       - restore
     environment:
-      PGPASSWORD: bitauto123
+      PGPASSWORD: ${POSTGRES_PASSWORD:-bitauto123}
     volumes:
       - ./docker/backup.dump:/backup/backup.dump:ro
     depends_on:
@@ -75,16 +101,12 @@ services:
     command: >
       pg_restore
         -h postgres
-        -U postgres
-        -d tracking_db
+        -U ${POSTGRES_USER:-postgres}
+        -d ${POSTGRES_DB:-tracking_db}
         --clean
         --if-exists
         -v
         /backup/backup.dump
-    networks:
-      - default
 
 volumes:
   postgres_data:
-  sqlite_data:
-  logs_data:

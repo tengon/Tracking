@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "sync": "npx tsx scripts/sync-device-details.ts"
+    "sync": "npx tsx scripts/sync-device-details.ts",
+    "mqtt": "npx tsx scripts/mqtt-publisher.ts"
   },
   "dependencies": {
     "@types/pg": "^8.20.0",
@@ -15,6 +16,7 @@
     "crypto-js": "^4.2.0",
     "flatpickr": "^4.6.13",
     "leaflet": "^1.9.4",
+    "mqtt": "^5.15.2",
     "next": "16.2.10",
     "pg": "^8.22.0",
     "react": "19.2.4",

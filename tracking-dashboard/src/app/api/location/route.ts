@@ -15,8 +15,32 @@ export async function POST(req: NextRequest) {
     if (!accessToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     if (imeis) {
-      const result = await getDeviceLocation(accessToken, imeis)
-      return NextResponse.json({ success: true, data: (result as any).result })
+      const imeisParam = Array.isArray(imeis) ? imeis.join(',') : String(imeis)
+      const result = await getDeviceLocation(accessToken, imeisParam)
+      const rawData = (result as any).result || (result as any).data || []
+      const locList = Array.isArray(rawData) ? rawData : (rawData ? [rawData] : [])
+
+      try {
+        const dbLabels = getDeviceLabels() as any[]
+        const labelMap = new Map<string, any>()
+        dbLabels.forEach(row => labelMap.set(row.imei, row))
+
+        const enriched = locList.map((loc: any) => {
+          const custom = labelMap.get(loc.imei)
+          if (custom) {
+            return {
+              ...loc,
+              deviceName: custom.custom_name || loc.deviceName,
+              assignedTo: custom.assigned_to_account || null,
+              customColor: custom.color_override || null,
+            }
+          }
+          return loc
+        })
+        return NextResponse.json({ success: true, data: enriched })
+      } catch {
+        return NextResponse.json({ success: true, data: locList })
+      }
     } else {
       let tree: CachedAccount[]
 

@@ -256,6 +256,25 @@ export interface DeviceCommand {
   isOffLine: string
 }
 
+// ─── Account ─────────────────────────────────────────────
+export interface AccountDetail {
+  account: string
+  name: string
+  type?: number
+  displayFlag?: number
+  address?: string | null
+  birth?: string | null
+  companyName?: string
+  email?: string
+  phone?: string
+  language?: string
+  sex?: number
+  enabledFlag?: number
+  remark?: string | null
+  userId?: string | null
+  parentId?: string | null
+}
+
 // ─── Store ───────────────────────────────────────────────
 export interface AuthStore {
   accessToken: string | null

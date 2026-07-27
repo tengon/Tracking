@@ -62,15 +62,45 @@ export default function MapPage() {
     }
   }, [accessToken, account, contextAccount])
 
+  // ── Real-time single device location fetch via jimi.device.location.get ──
+  const fetchRealtimeDeviceLocation = useCallback(async (targetImei: string) => {
+    if (!accessToken) return
+    try {
+      const res = await fetch('/api/location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken, imeis: targetImei }),
+      })
+      const json = await res.json()
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        const liveLoc = json.data[0]
+        setDevices(prev => prev.map(d => d.imei === targetImei ? { ...d, ...liveLoc } : d))
+        setSelected(prev => (prev && prev.imei === targetImei ? { ...prev, ...liveLoc } : liveLoc))
+        setLastUpdate(new Date())
+      }
+    } catch (e) {
+      console.error('Failed to fetch real-time location via jimi.device.location.get:', e)
+    }
+  }, [accessToken])
+
   const fetchTree = useCallback(async () => {
     if (!accessToken || !account) return
     try {
       const res = await fetch(`/api/users/tree?accessToken=${encodeURIComponent(accessToken)}&target=${encodeURIComponent(account)}`)
       const json = await res.json()
-      if (json.success) {
-        // JIMI doesn't return the parent account itself in child.list, so we wrap it
+      if (json.success && Array.isArray(json.data)) {
         setAccountTree([{ account, name: account, children: json.data }])
-        setExpandedAccounts(prev => ({ ...prev, [account]: true }))
+
+        // Auto expand root and all sub-account nodes
+        const autoExpanded: Record<string, boolean> = { [account]: true }
+        const expandAll = (nodes: any[]) => {
+          for (const n of nodes) {
+            autoExpanded[n.account] = true
+            if (n.children) expandAll(n.children)
+          }
+        }
+        expandAll(json.data)
+        setExpandedAccounts(autoExpanded)
       }
     } catch (e) {
       console.error(e)
@@ -180,7 +210,8 @@ export default function MapPage() {
   const renderAccountNode = (node: any, level: number = 0) => {
     const accName = node.account
     const displayName = node.name || accName
-    const locs = groupedAccounts[accName] || []
+    const descendantAccs = getDescendants(accountTree, accName) || [accName]
+    const locs = devices.filter(d => descendantAccs.includes(d._jimiAccount || d.assignedTo || account || 'Unassigned'))
     const isSelected = selectedAccountName === accName
     const isExpanded = !!expandedAccounts[accName]
     const hasChildren = node.children && node.children.length > 0
@@ -333,7 +364,7 @@ export default function MapPage() {
                     const iconColor = isOnline ? (isMoving ? 'var(--green)' : 'var(--cyan)') : 'var(--red)'
                     
                     return (
-                      <div key={d.imei} onClick={() => setSelected(d)} style={{
+                      <div key={d.imei} onClick={() => { setSelected(d); fetchRealtimeDeviceLocation(d.imei); }} style={{
                         padding: '12px', background: 'var(--bg-surface)',
                         border: `1px solid ${selected?.imei === d.imei ? 'var(--cyan)' : 'transparent'}`,
                         borderRadius: 'var(--r-md)', cursor: 'pointer', transition: 'var(--transition)',

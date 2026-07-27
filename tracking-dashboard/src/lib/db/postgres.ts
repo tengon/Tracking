@@ -19,97 +19,260 @@ if (process.env.NODE_ENV === 'production') {
 
 export default pool
 
-// Ensure PostgreSQL tables exist
-pool.query(`
-  CREATE TABLE IF NOT EXISTS accounts (
-    account TEXT PRIMARY KEY,
-    parent_account TEXT,
-    name TEXT,
-    company_name TEXT,
-    email TEXT,
-    phone TEXT,
-    type INT DEFAULT 0,
-    enabled INT DEFAULT 1,
-    last_sync_at TIMESTAMPTZ DEFAULT NOW(),
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  );
-  CREATE INDEX IF NOT EXISTS idx_accounts_parent ON accounts(parent_account);
+let initPromise: Promise<void> | null = null
 
-  CREATE TABLE IF NOT EXISTS devices (
-    imei TEXT PRIMARY KEY,
-    account TEXT,
-    device_name TEXT,
-    device_type TEXT,
-    model TEXT,
-    sim_card TEXT,
-    license_plate TEXT,
-    vin TEXT,
-    brand TEXT,
-    color TEXT,
-    install_date TEXT,
-    expiry_date TEXT,
-    activate_date TEXT,
-    mileage NUMERIC,
-    mc_type TEXT,
-    mc_type_use_scope TEXT,
-    iccid TEXT,
-    imsi TEXT,
-    status TEXT,
-    customer_name TEXT,
-    device_group TEXT,
-    device_group_id TEXT,
-    vehicle_brand TEXT,
-    vehicle_models TEXT,
-    vehicle_icon TEXT,
-    engine_number TEXT,
-    driver_name TEXT,
-    driver_phone TEXT,
-    import_time TIMESTAMPTZ,
-    current_mileage NUMERIC,
-    raw_detail JSONB,
-    last_sync_at TIMESTAMPTZ DEFAULT NOW(),
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  );
-  CREATE INDEX IF NOT EXISTS idx_devices_account ON devices(account);
+export async function ensureTablesExist(): Promise<void> {
+  if (initPromise) return initPromise
+  initPromise = (async () => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS accounts (
+          account TEXT PRIMARY KEY,
+          parent_account TEXT,
+          name TEXT,
+          company_name TEXT,
+          email TEXT,
+          phone TEXT,
+          type INT DEFAULT 0,
+          display_flag INT DEFAULT 1,
+          address TEXT,
+          birth TEXT,
+          language TEXT,
+          sex INT DEFAULT 0,
+          enabled_flag INT DEFAULT 1,
+          enabled INT DEFAULT 1,
+          remark TEXT,
+          user_id TEXT,
+          parent_id TEXT,
+          raw_detail JSONB,
+          last_sync_at TIMESTAMPTZ DEFAULT NOW(),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_flag INT DEFAULT 1;
+        ALTER TABLE accounts ADD COLUMN IF NOT EXISTS address TEXT;
+        ALTER TABLE accounts ADD COLUMN IF NOT EXISTS birth TEXT;
+        ALTER TABLE accounts ADD COLUMN IF NOT EXISTS language TEXT;
+        ALTER TABLE accounts ADD COLUMN IF NOT EXISTS sex INT DEFAULT 0;
+        ALTER TABLE accounts ADD COLUMN IF NOT EXISTS enabled_flag INT DEFAULT 1;
+        ALTER TABLE accounts ADD COLUMN IF NOT EXISTS remark TEXT;
+        ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_id TEXT;
+        ALTER TABLE accounts ADD COLUMN IF NOT EXISTS parent_id TEXT;
+        ALTER TABLE accounts ADD COLUMN IF NOT EXISTS raw_detail JSONB;
+        CREATE INDEX IF NOT EXISTS idx_accounts_parent ON accounts(parent_account);
 
-  CREATE TABLE IF NOT EXISTS device_details (
-    imei TEXT PRIMARY KEY,
-    device_name TEXT,
-    account TEXT,
-    customer_name TEXT,
-    mc_type TEXT,
-    mc_type_use_scope TEXT,
-    sim TEXT,
-    expiration TEXT,
-    user_expiration TEXT,
-    activation_time TEXT,
-    remark TEXT,
-    vehicle_name TEXT,
-    vehicle_icon TEXT,
-    vehicle_number TEXT,
-    vehicle_models TEXT,
-    car_frame TEXT,
-    driver_name TEXT,
-    driver_phone TEXT,
-    enabled_flag INT DEFAULT 1,
-    engine_number TEXT,
-    iccid TEXT,
-    import_time TEXT,
-    imsi TEXT,
-    license_plat_no TEXT,
-    vin TEXT,
-    vehicle_brand TEXT,
-    fuel_100km TEXT,
-    status TEXT,
-    current_mileage TEXT,
-    device_group_id TEXT,
-    device_group TEXT,
-    raw_detail JSONB,
-    last_sync_at TIMESTAMPTZ DEFAULT NOW(),
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  );
-  CREATE INDEX IF NOT EXISTS idx_device_details_account ON device_details(account);
-`).catch(err => console.error('Error initializing PostgreSQL tables:', err))
+        CREATE TABLE IF NOT EXISTS devices (
+          imei TEXT PRIMARY KEY,
+          account TEXT,
+          device_name TEXT,
+          device_type TEXT,
+          model TEXT,
+          sim_card TEXT,
+          license_plate TEXT,
+          vin TEXT,
+          brand TEXT,
+          color TEXT,
+          install_date TEXT,
+          expiry_date TEXT,
+          activate_date TEXT,
+          mileage NUMERIC,
+          mc_type TEXT,
+          mc_type_use_scope TEXT,
+          iccid TEXT,
+          imsi TEXT,
+          status TEXT,
+          customer_name TEXT,
+          device_group TEXT,
+          device_group_id TEXT,
+          vehicle_brand TEXT,
+          vehicle_models TEXT,
+          vehicle_icon TEXT,
+          engine_number TEXT,
+          driver_name TEXT,
+          driver_phone TEXT,
+          import_time TIMESTAMPTZ,
+          current_mileage NUMERIC,
+          raw_detail JSONB,
+          last_sync_at TIMESTAMPTZ DEFAULT NOW(),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_devices_account ON devices(account);
+
+        CREATE TABLE IF NOT EXISTS device_details (
+          imei TEXT PRIMARY KEY,
+          device_name TEXT,
+          account TEXT,
+          customer_name TEXT,
+          mc_type TEXT,
+          mc_type_use_scope TEXT,
+          sim TEXT,
+          expiration TEXT,
+          user_expiration TEXT,
+          activation_time TEXT,
+          remark TEXT,
+          vehicle_name TEXT,
+          vehicle_icon TEXT,
+          vehicle_number TEXT,
+          vehicle_models TEXT,
+          car_frame TEXT,
+          driver_name TEXT,
+          driver_phone TEXT,
+          enabled_flag INT DEFAULT 1,
+          engine_number TEXT,
+          iccid TEXT,
+          import_time TEXT,
+          imsi TEXT,
+          license_plat_no TEXT,
+          vin TEXT,
+          vehicle_brand TEXT,
+          fuel_100km TEXT,
+          status TEXT,
+          current_mileage TEXT,
+          device_group_id TEXT,
+          device_group TEXT,
+          raw_detail JSONB,
+          last_sync_at TIMESTAMPTZ DEFAULT NOW(),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_device_details_account ON device_details(account);
+
+        CREATE TABLE IF NOT EXISTS rpt_mileage (
+          id             BIGSERIAL PRIMARY KEY,
+          account        TEXT,
+          imei           TEXT NOT NULL,
+          device_name    TEXT,
+          report_date    DATE,
+          total_mileage  NUMERIC,
+          run_time       INT,
+          idle_time      INT,
+          max_speed      NUMERIC,
+          avg_speed      NUMERIC,
+          fuel_consumed  NUMERIC,
+          raw_data       JSONB,
+          synced_at      TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT unq_mileage_imei_date UNIQUE (imei, report_date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rpt_mileage_imei    ON rpt_mileage(imei);
+        CREATE INDEX IF NOT EXISTS idx_rpt_mileage_account ON rpt_mileage(account);
+        CREATE INDEX IF NOT EXISTS idx_rpt_mileage_date    ON rpt_mileage(report_date);
+
+        CREATE TABLE IF NOT EXISTS rpt_trips (
+          id            BIGSERIAL PRIMARY KEY,
+          account       TEXT,
+          imei          TEXT NOT NULL,
+          device_name   TEXT,
+          trip_id       TEXT,
+          start_time    TIMESTAMPTZ,
+          end_time      TIMESTAMPTZ,
+          start_lat     NUMERIC,
+          start_lng     NUMERIC,
+          start_addr    TEXT,
+          end_lat       NUMERIC,
+          end_lng       NUMERIC,
+          end_addr      TEXT,
+          distance_km   NUMERIC,
+          duration_min  INT,
+          avg_speed     NUMERIC,
+          max_speed     NUMERIC,
+          raw_data      JSONB,
+          synced_at     TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT unq_trip_imei_start UNIQUE (imei, start_time)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rpt_trips_imei    ON rpt_trips(imei);
+        CREATE INDEX IF NOT EXISTS idx_rpt_trips_account ON rpt_trips(account);
+        CREATE INDEX IF NOT EXISTS idx_rpt_trips_start   ON rpt_trips(start_time);
+
+        CREATE TABLE IF NOT EXISTS rpt_parking (
+          id            BIGSERIAL PRIMARY KEY,
+          account       TEXT,
+          imei          TEXT NOT NULL,
+          device_name   TEXT,
+          start_time    TIMESTAMPTZ,
+          end_time      TIMESTAMPTZ,
+          duration_min  INT,
+          acc_status    TEXT,
+          lat           NUMERIC,
+          lng           NUMERIC,
+          address       TEXT,
+          raw_data      JSONB,
+          synced_at     TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT unq_parking_imei_start UNIQUE (imei, start_time)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rpt_parking_imei    ON rpt_parking(imei);
+        CREATE INDEX IF NOT EXISTS idx_rpt_parking_account ON rpt_parking(account);
+        CREATE INDEX IF NOT EXISTS idx_rpt_parking_start   ON rpt_parking(start_time);
+
+        CREATE TABLE IF NOT EXISTS rpt_alarms (
+          id          BIGSERIAL PRIMARY KEY,
+          account     TEXT,
+          imei        TEXT NOT NULL,
+          device_name TEXT,
+          alarm_id    TEXT,
+          alarm_type  TEXT,
+          alarm_code  TEXT,
+          alarm_time  TIMESTAMPTZ,
+          severity    TEXT,
+          lat         NUMERIC,
+          lng         NUMERIC,
+          address     TEXT,
+          speed       NUMERIC,
+          raw_data    JSONB,
+          synced_at   TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT unq_alarm_imei_time_type UNIQUE (imei, alarm_time, alarm_code)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rpt_alarms_imei    ON rpt_alarms(imei);
+        CREATE INDEX IF NOT EXISTS idx_rpt_alarms_account ON rpt_alarms(account);
+        CREATE INDEX IF NOT EXISTS idx_rpt_alarms_time    ON rpt_alarms(alarm_time);
+
+        CREATE TABLE IF NOT EXISTS rpt_geofence_duration (
+          id              BIGSERIAL PRIMARY KEY,
+          account         TEXT,
+          imei            TEXT NOT NULL,
+          device_name     TEXT,
+          fence_id        TEXT,
+          fence_name      TEXT,
+          enter_time      TIMESTAMPTZ,
+          exit_time       TIMESTAMPTZ,
+          dwell_min       INT,
+          alert_type      TEXT,
+          raw_data        JSONB,
+          synced_at       TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT unq_gfdur_imei_fence_enter UNIQUE (imei, fence_id, enter_time)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rpt_gfdur_imei    ON rpt_geofence_duration(imei);
+        CREATE INDEX IF NOT EXISTS idx_rpt_gfdur_account ON rpt_geofence_duration(account);
+        CREATE INDEX IF NOT EXISTS idx_rpt_gfdur_fence   ON rpt_geofence_duration(fence_id);
+
+        CREATE TABLE IF NOT EXISTS rpt_obd (
+          id              BIGSERIAL PRIMARY KEY,
+          account         TEXT,
+          imei            TEXT NOT NULL,
+          device_name     TEXT,
+          report_time     TIMESTAMPTZ,
+          odometer        NUMERIC,
+          fuel_level      NUMERIC,
+          coolant_temp    NUMERIC,
+          battery_voltage NUMERIC,
+          rpm             INT,
+          speed           NUMERIC,
+          dtc_count       INT DEFAULT 0,
+          raw_data        JSONB,
+          synced_at       TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT unq_obd_imei_time UNIQUE (imei, report_time)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rpt_obd_imei    ON rpt_obd(imei);
+        CREATE INDEX IF NOT EXISTS idx_rpt_obd_account ON rpt_obd(account);
+        CREATE INDEX IF NOT EXISTS idx_rpt_obd_time    ON rpt_obd(report_time);
+      `)
+    } catch (err: any) {
+      console.warn('PostgreSQL table initialization warning (DB may be offline at build time):', err?.message || err)
+      initPromise = null
+    }
+  })()
+  return initPromise
+}
+
+// Fire table initialization asynchronously without blocking imports
+ensureTablesExist()
 
 // ─── Account Table Helpers ────────────────────────────────────────────────────
 
@@ -121,24 +284,50 @@ export interface AccountRow {
   email: string | null
   phone: string | null
   type: number
+  display_flag: number | null
+  address: string | null
+  birth: string | null
+  language: string | null
+  sex: number | null
+  enabled_flag: number | null
   enabled: number
+  remark: string | null
+  user_id: string | null
+  parent_id: string | null
+  raw_detail: any | null
   last_sync_at: Date
   created_at: Date
 }
 
-/** Upsert a single account row */
+/** Upsert a single account row with detail fields */
 export async function upsertAccount(data: {
   account: string
   parent_account?: string | null
-  name?: string
-  company_name?: string
-  email?: string
-  phone?: string
+  name?: string | null
+  company_name?: string | null
+  email?: string | null
+  phone?: string | null
   type?: number
+  display_flag?: number | null
+  address?: string | null
+  birth?: string | null
+  language?: string | null
+  sex?: number | null
+  enabled_flag?: number | null
+  enabled?: number
+  remark?: string | null
+  user_id?: string | null
+  parent_id?: string | null
+  raw_detail?: any
 }) {
+  const enabledFlag = data.enabled_flag ?? data.enabled ?? 1
   await pool.query(
-    `INSERT INTO accounts (account, parent_account, name, company_name, email, phone, type, last_sync_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+    `INSERT INTO accounts (
+       account, parent_account, name, company_name, email, phone, type,
+       display_flag, address, birth, language, sex, enabled_flag, enabled,
+       remark, user_id, parent_id, raw_detail, last_sync_at
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW())
      ON CONFLICT (account) DO UPDATE SET
        parent_account = EXCLUDED.parent_account,
        name = EXCLUDED.name,
@@ -146,6 +335,17 @@ export async function upsertAccount(data: {
        email = EXCLUDED.email,
        phone = EXCLUDED.phone,
        type = EXCLUDED.type,
+       display_flag = EXCLUDED.display_flag,
+       address = EXCLUDED.address,
+       birth = EXCLUDED.birth,
+       language = EXCLUDED.language,
+       sex = EXCLUDED.sex,
+       enabled_flag = EXCLUDED.enabled_flag,
+       enabled = EXCLUDED.enabled,
+       remark = EXCLUDED.remark,
+       user_id = EXCLUDED.user_id,
+       parent_id = EXCLUDED.parent_id,
+       raw_detail = EXCLUDED.raw_detail,
        last_sync_at = NOW()`,
     [
       data.account,
@@ -155,6 +355,17 @@ export async function upsertAccount(data: {
       data.email ?? null,
       data.phone ?? null,
       data.type ?? 0,
+      data.display_flag ?? 1,
+      data.address ?? null,
+      data.birth ?? null,
+      data.language ?? null,
+      data.sex ?? 0,
+      enabledFlag,
+      enabledFlag,
+      data.remark ?? null,
+      data.user_id ?? null,
+      data.parent_id ?? null,
+      data.raw_detail ? JSON.stringify(data.raw_detail) : null,
     ]
   )
 }
@@ -195,23 +406,50 @@ export async function getDescendants(rootAccount: string): Promise<Array<{ accou
 /** Build a full nested tree structure starting from a root account */
 export async function buildAccountTree(rootAccount: string): Promise<any> {
   const all = await getAllAccounts()
-  const map = new Map<string, any>()
+  if (!all || all.length === 0) return null
+
+  const userIdToNode = new Map<string, any>()
+  const accountToNode = new Map<string, any>()
 
   all.forEach(a => {
-    map.set(a.account, {
+    const node = {
       account: a.account,
-      name: a.name,
-      customerName: a.company_name || a.name,
+      name: a.name || a.account,
+      companyName: a.company_name || a.name || a.account,
+      customerName: a.company_name || a.name || a.account,
+      type: a.type,
+      userId: a.user_id ? String(a.user_id) : null,
+      parentId: a.parent_id ? String(a.parent_id) : null,
+      parentAccount: a.parent_account,
       children: [],
-    })
+    }
+
+    if (node.userId) userIdToNode.set(node.userId, node)
+    accountToNode.set(node.account, node)
   })
 
-  let root: any = null
+  let root = accountToNode.get(rootAccount)
+  if (!root) {
+    root = { account: rootAccount, name: rootAccount, children: [] }
+    accountToNode.set(rootAccount, root)
+  }
+
   all.forEach(a => {
-    if (a.account === rootAccount) {
-      root = map.get(a.account)
-    } else if (a.parent_account && map.has(a.parent_account)) {
-      map.get(a.parent_account).children.push(map.get(a.account))
+    if (a.account === rootAccount) return
+    const node = accountToNode.get(a.account)
+    if (!node) return
+
+    let parentNode: any = null
+    if (node.parentId && userIdToNode.has(node.parentId)) {
+      parentNode = userIdToNode.get(node.parentId)
+    } else if (node.parentAccount && accountToNode.has(node.parentAccount)) {
+      parentNode = accountToNode.get(node.parentAccount)
+    }
+
+    if (parentNode && parentNode !== node) {
+      parentNode.children.push(node)
+    } else if (root && root !== node) {
+      root.children.push(node)
     }
   })
 
@@ -888,136 +1126,7 @@ export async function hasGeofenceData(account?: string): Promise<boolean> {
 }
 
 // ─── Report Tables — DDL Init ─────────────────────────────────────────────────
-
-pool.query(`
-  CREATE TABLE IF NOT EXISTS rpt_mileage (
-    id             BIGSERIAL PRIMARY KEY,
-    account        TEXT,
-    imei           TEXT NOT NULL,
-    device_name    TEXT,
-    report_date    DATE,
-    total_mileage  NUMERIC,
-    run_time       INT,
-    idle_time      INT,
-    max_speed      NUMERIC,
-    avg_speed      NUMERIC,
-    fuel_consumed  NUMERIC,
-    raw_data       JSONB,
-    synced_at      TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT unq_mileage_imei_date UNIQUE (imei, report_date)
-  );
-  CREATE INDEX IF NOT EXISTS idx_rpt_mileage_imei    ON rpt_mileage(imei);
-  CREATE INDEX IF NOT EXISTS idx_rpt_mileage_account ON rpt_mileage(account);
-  CREATE INDEX IF NOT EXISTS idx_rpt_mileage_date    ON rpt_mileage(report_date);
-
-  CREATE TABLE IF NOT EXISTS rpt_trips (
-    id            BIGSERIAL PRIMARY KEY,
-    account       TEXT,
-    imei          TEXT NOT NULL,
-    device_name   TEXT,
-    trip_id       TEXT,
-    start_time    TIMESTAMPTZ,
-    end_time      TIMESTAMPTZ,
-    start_lat     NUMERIC,
-    start_lng     NUMERIC,
-    start_addr    TEXT,
-    end_lat       NUMERIC,
-    end_lng       NUMERIC,
-    end_addr      TEXT,
-    distance_km   NUMERIC,
-    duration_min  INT,
-    avg_speed     NUMERIC,
-    max_speed     NUMERIC,
-    raw_data      JSONB,
-    synced_at     TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT unq_trip_imei_start UNIQUE (imei, start_time)
-  );
-  CREATE INDEX IF NOT EXISTS idx_rpt_trips_imei    ON rpt_trips(imei);
-  CREATE INDEX IF NOT EXISTS idx_rpt_trips_account ON rpt_trips(account);
-  CREATE INDEX IF NOT EXISTS idx_rpt_trips_start   ON rpt_trips(start_time);
-
-  CREATE TABLE IF NOT EXISTS rpt_parking (
-    id            BIGSERIAL PRIMARY KEY,
-    account       TEXT,
-    imei          TEXT NOT NULL,
-    device_name   TEXT,
-    start_time    TIMESTAMPTZ,
-    end_time      TIMESTAMPTZ,
-    duration_min  INT,
-    acc_status    TEXT,
-    lat           NUMERIC,
-    lng           NUMERIC,
-    address       TEXT,
-    raw_data      JSONB,
-    synced_at     TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT unq_parking_imei_start UNIQUE (imei, start_time)
-  );
-  CREATE INDEX IF NOT EXISTS idx_rpt_parking_imei    ON rpt_parking(imei);
-  CREATE INDEX IF NOT EXISTS idx_rpt_parking_account ON rpt_parking(account);
-  CREATE INDEX IF NOT EXISTS idx_rpt_parking_start   ON rpt_parking(start_time);
-
-  CREATE TABLE IF NOT EXISTS rpt_alarms (
-    id          BIGSERIAL PRIMARY KEY,
-    account     TEXT,
-    imei        TEXT NOT NULL,
-    device_name TEXT,
-    alarm_id    TEXT,
-    alarm_type  TEXT,
-    alarm_code  TEXT,
-    alarm_time  TIMESTAMPTZ,
-    severity    TEXT,
-    lat         NUMERIC,
-    lng         NUMERIC,
-    address     TEXT,
-    speed       NUMERIC,
-    raw_data    JSONB,
-    synced_at   TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT unq_alarm_imei_time_type UNIQUE (imei, alarm_time, alarm_code)
-  );
-  CREATE INDEX IF NOT EXISTS idx_rpt_alarms_imei    ON rpt_alarms(imei);
-  CREATE INDEX IF NOT EXISTS idx_rpt_alarms_account ON rpt_alarms(account);
-  CREATE INDEX IF NOT EXISTS idx_rpt_alarms_time    ON rpt_alarms(alarm_time);
-
-  CREATE TABLE IF NOT EXISTS rpt_geofence_duration (
-    id              BIGSERIAL PRIMARY KEY,
-    account         TEXT,
-    imei            TEXT NOT NULL,
-    device_name     TEXT,
-    fence_id        TEXT,
-    fence_name      TEXT,
-    enter_time      TIMESTAMPTZ,
-    exit_time       TIMESTAMPTZ,
-    dwell_min       INT,
-    alert_type      TEXT,
-    raw_data        JSONB,
-    synced_at       TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT unq_gfdur_imei_fence_enter UNIQUE (imei, fence_id, enter_time)
-  );
-  CREATE INDEX IF NOT EXISTS idx_rpt_gfdur_imei    ON rpt_geofence_duration(imei);
-  CREATE INDEX IF NOT EXISTS idx_rpt_gfdur_account ON rpt_geofence_duration(account);
-  CREATE INDEX IF NOT EXISTS idx_rpt_gfdur_fence   ON rpt_geofence_duration(fence_id);
-
-  CREATE TABLE IF NOT EXISTS rpt_obd (
-    id              BIGSERIAL PRIMARY KEY,
-    account         TEXT,
-    imei            TEXT NOT NULL,
-    device_name     TEXT,
-    report_time     TIMESTAMPTZ,
-    odometer        NUMERIC,
-    fuel_level      NUMERIC,
-    coolant_temp    NUMERIC,
-    battery_voltage NUMERIC,
-    rpm             INT,
-    speed           NUMERIC,
-    dtc_count       INT DEFAULT 0,
-    raw_data        JSONB,
-    synced_at       TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT unq_obd_imei_time UNIQUE (imei, report_time)
-  );
-  CREATE INDEX IF NOT EXISTS idx_rpt_obd_imei    ON rpt_obd(imei);
-  CREATE INDEX IF NOT EXISTS idx_rpt_obd_account ON rpt_obd(account);
-  CREATE INDEX IF NOT EXISTS idx_rpt_obd_time    ON rpt_obd(report_time);
-`).catch(err => console.error('Error initializing report tables:', err))
+// (Handled lazily inside ensureTablesExist above)
 
 // ─── Report Upsert Helpers ────────────────────────────────────────────────────
 

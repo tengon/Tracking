@@ -2,33 +2,37 @@
 .git
 .gitignore
 
-# Dependencies (akan di-install ulang di container)
+# Dependencies (re-installed inside build container)
 node_modules
 
-# Next.js build output (akan di-build di dalam container)
+# Next.js build outputs
 .next
+out
 
-# Environment files (jangan masuk ke image)
+# Environment local files
 .env.local
 .env*.local
 
-# Logs & debug
+# Local SQLite databases & logs
 *.log
 logs/
+data/
+*.sqlite
+*.db
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# Editor
+# Editor configurations
 .vscode
 .idea
 *.swp
 
-# Docker backup dump (besar, hanya dibutuhkan saat restore)
+# Docker backup dumps
 docker/backup.dump
 
-# Docs & misc
+# Documentation & temporary outputs
 Docs/
 README.md
 *.txt

@@ -35,6 +35,11 @@ export default function UsersPage() {
   const [saving,   setSaving]   = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
 
+  // ── MQTT Streaming State ───────────────────────────────────────────────────
+  const [mqttSending, setMqttSending] = useState<string | null>(null)
+  const [mqttResult, setMqttResult]   = useState<any | null>(null)
+  const [copyingJson, setCopyingJson] = useState(false)
+
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchUsers = useCallback(async () => {
     if (!accessToken || !myAccount) return
@@ -56,16 +61,23 @@ export default function UsersPage() {
   // ── Notify helper ──────────────────────────────────────────────────────────
   const notify = (msg: string, isErr = false) => {
     if (isErr) setError(msg); else setSuccess(msg)
-    setTimeout(() => { setError(null); setSuccess(null) }, 4000)
+    setTimeout(() => { setError(null); setSuccess(null) }, 5000)
   }
 
+  const [selectedUser, setSelectedUser] = useState<SubAccount | null>(null)
+
   // ── Open modals ────────────────────────────────────────────────────────────
-  const openCreate = () => { setForm(emptyForm); setModal('create') }
+  const openCreate = () => { setForm(emptyForm); setSelectedUser(null); setModal('create') }
   const openEdit   = (u: SubAccount) => {
     setForm({ account: u.account, name: u.name, password: '', email: u.email ?? '', phone: u.phone ?? '', companyName: u.companyName ?? '' })
+    setSelectedUser(u)
     setModal('edit')
   }
-  const closeModal = () => { setModal(null); setForm(emptyForm) }
+  const openDetail = (u: SubAccount) => {
+    setSelectedUser(u)
+    setModal('detail' as any)
+  }
+  const closeModal = () => { setModal(null); setSelectedUser(null); setForm(emptyForm) }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,18 +106,20 @@ export default function UsersPage() {
   }
 
   // ── Delete ─────────────────────────────────────────────────────────────────
-  const handleDelete = async (acc: string) => {
-    if (!confirm(`Hapus akun "${acc}"? Tindakan ini tidak dapat dibatalkan.`)) return
-    setDeleting(acc)
+  const handleDelete = async (accountTarget: string) => {
+    if (!confirm(`Yakin ingin menghapus sub-account "${accountTarget}"?`)) return
+    setDeleting(accountTarget)
     try {
-      const res = await fetch('/api/users', {
-        method:  'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken, account: acc }),
+      const res = await fetch(`/api/users?accessToken=${encodeURIComponent(accessToken || '')}&childAccount=${encodeURIComponent(accountTarget)}`, {
+        method: 'DELETE',
       })
       const json = await res.json()
-      if (json.success) { notify('✅ Akun berhasil dihapus'); fetchUsers() }
-      else notify(json.error || 'Gagal menghapus', true)
+      if (json.success) {
+        notify('✅ Akun berhasil dihapus')
+        fetchUsers()
+      } else {
+        notify(json.error || 'Gagal menghapus', true)
+      }
     } catch {
       notify('Network error', true)
     } finally {
@@ -113,24 +127,45 @@ export default function UsersPage() {
     }
   }
 
-  // ── Filter ─────────────────────────────────────────────────────────────────
-  const filtered = users.filter(u =>
-    !search ||
-    u.account?.toLowerCase().includes(search.toLowerCase()) ||
-    u.name?.toLowerCase().includes(search.toLowerCase()) ||
-    u.email?.toLowerCase().includes(search.toLowerCase()) ||
-    u.companyName?.toLowerCase().includes(search.toLowerCase())
-  )
+  // ── MQTT Publishing Handler ────────────────────────────────────────────────
+  const handleSendMqtt = async (accountTarget: string) => {
+    setMqttSending(accountTarget)
+    try {
+      const res = await fetch('/api/mqtt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: accountTarget, accessToken }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        notify(`✅ Berhasil mengirim lokasi ${json.publishedCount} perangkat ke MQTT broker (${json.broker})!`)
+        setMqttResult(json)
+      } else {
+        notify(json.error || 'Gagal mengirim lokasi ke MQTT broker', true)
+      }
+    } catch {
+      notify('Gagal terhubung ke server MQTT', true)
+    } finally {
+      setMqttSending(null)
+    }
+  }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Filtered list ──────────────────────────────────────────────────────────
+  const filtered = users.filter(u => {
+    const q = search.toLowerCase()
+    return (
+      u.account.toLowerCase().includes(q) ||
+      u.name.toLowerCase().includes(q) ||
+      (u.email ?? '').toLowerCase().includes(q) ||
+      (u.companyName ?? '').toLowerCase().includes(q)
+    )
+  })
+
   return (
     <>
-      <Topbar
-        title="User Management"
-        subtitle={`${users.length} sub-account terdaftar`}
-      />
-
-      {/* Navigation Tabs */}
+      <Topbar title="Manajemen Pengguna (Sub-Accounts)" />
+      
+      {/* ── Sub Navigation Header ────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
         <Link
           href="/users"
@@ -138,8 +173,7 @@ export default function UsersPage() {
           style={{
             padding: '8px 16px',
             fontSize: 13,
-            fontWeight: 700,
-            background: 'rgba(0,245,255,0.15)',
+            fontWeight: 600,
             color: 'var(--cyan)',
             border: '1px solid rgba(0,245,255,0.3)',
             borderRadius: 'var(--r-md)',
@@ -162,6 +196,54 @@ export default function UsersPage() {
         </Link>
       </div>
 
+      {/* ── MQTT Broker Integration Panel ─────────────────────────────────── */}
+      <div
+        className="card"
+        style={{
+          marginBottom: 20,
+          background: 'linear-gradient(135deg, rgba(0,245,255,0.06) 0%, rgba(13,13,26,0.5) 100%)',
+          borderLeft: '4px solid #00F5FF',
+          border: '1px solid rgba(0,245,255,0.2)',
+          boxShadow: '0 4px 20px rgba(0,245,255,0.05)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{
+              fontSize: 24, padding: 10, background: 'rgba(0,245,255,0.1)',
+              borderRadius: 'var(--r-lg)', border: '1px solid rgba(0,245,255,0.2)'
+            }}>
+              📡
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                MQTT Broker Location Integration
+                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'rgba(0,255,65,0.15)', color: 'var(--green)', border: '1px solid rgba(0,255,65,0.3)', fontWeight: 800 }}>ACTIVE</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'JetBrains Mono, monospace' }}>
+                Broker: <span style={{ color: 'var(--cyan)', fontWeight: 700 }}>36.92.47.218:14583</span> | Topik: <span style={{ color: 'var(--magenta)' }}>fleet/(imei)</span> | Interval: <span style={{ color: 'var(--yellow)' }}>10s</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            className="btn btn-primary"
+            onClick={() => handleSendMqtt(myAccount || 'tengon')}
+            disabled={mqttSending === (myAccount || 'tengon')}
+            style={{
+              padding: '10px 18px',
+              fontSize: 13,
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, #00F5FF 0%, #0077FF 100%)',
+              color: '#000',
+              boxShadow: '0 0 16px rgba(0,245,255,0.3)',
+            }}
+          >
+            {mqttSending === (myAccount || 'tengon') ? '⏳ Broadcast Ke MQTT...' : '🚀 Kirim Semua User Ke MQTT'}
+          </button>
+        </div>
+      </div>
+
       {/* ── Theme Switcher Panel ─────────────────────────────────────────── */}
       <div
         className="card"
@@ -172,39 +254,27 @@ export default function UsersPage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-          {/* Label */}
           <div>
             <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--text-primary)' }}>🎨 Tampilan Aplikasi</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Pilih tema antarmuka yang Anda inginkan</div>
           </div>
 
-          {/* Theme Option Cards */}
           <div style={{ display: 'flex', gap: 10 }}>
-            {/* Dark Mode Card */}
             <button
               onClick={() => setTheme('dark')}
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 8,
-                padding: '12px 20px',
-                borderRadius: 'var(--r-lg)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                padding: '12px 20px', borderRadius: 'var(--r-lg)',
                 border: theme === 'dark' ? '2px solid var(--cyan)' : '2px solid var(--bg-border)',
                 background: theme === 'dark' ? 'rgba(0,245,255,0.08)' : 'var(--bg-elevated)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                cursor: 'pointer', transition: 'all 0.2s ease',
                 boxShadow: theme === 'dark' ? '0 0 16px rgba(0,119,255,0.25)' : 'none',
                 minWidth: 100,
               }}
             >
-              {/* Dark Preview Swatch */}
               <div style={{
-                width: 60, height: 40, borderRadius: 8,
-                background: '#070710',
-                border: '1px solid #1A1A2E',
-                display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center',
-                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.5)',
+                width: 60, height: 40, borderRadius: 8, background: '#070710', border: '1px solid #1A1A2E',
+                display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.5)',
               }}>
                 <div style={{ width: 8, height: 20, background: '#00F5FF', borderRadius: 2, opacity: 0.8 }} />
                 <div style={{ width: 8, height: 14, background: '#BF00FF', borderRadius: 2, opacity: 0.6 }} />
@@ -216,31 +286,21 @@ export default function UsersPage() {
               )}
             </button>
 
-            {/* Light Mode Card */}
             <button
               onClick={() => setTheme('light')}
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 8,
-                padding: '12px 20px',
-                borderRadius: 'var(--r-lg)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                padding: '12px 20px', borderRadius: 'var(--r-lg)',
                 border: theme === 'light' ? '2px solid var(--cyan)' : '2px solid var(--bg-border)',
                 background: theme === 'light' ? 'rgba(0,119,255,0.07)' : 'var(--bg-elevated)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                cursor: 'pointer', transition: 'all 0.2s ease',
                 boxShadow: theme === 'light' ? '0 0 16px rgba(0,119,255,0.2)' : 'none',
                 minWidth: 100,
               }}
             >
-              {/* Light Preview Swatch */}
               <div style={{
-                width: 60, height: 40, borderRadius: 8,
-                background: '#F0F4FF',
-                border: '1px solid #D1DCF5',
-                display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center',
-                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)',
+                width: 60, height: 40, borderRadius: 8, background: '#F0F4FF', border: '1px solid #D1DCF5',
+                display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)',
               }}>
                 <div style={{ width: 8, height: 20, background: '#0077FF', borderRadius: 2, opacity: 0.8 }} />
                 <div style={{ width: 8, height: 14, background: '#6D28D9', borderRadius: 2, opacity: 0.6 }} />
@@ -275,7 +335,7 @@ export default function UsersPage() {
       <div className="page-header">
         <div>
           <div className="page-title">User Management</div>
-          <div className="page-subtitle">Kelola sub-account yang berada di bawah akun Anda</div>
+          <div className="page-subtitle">Kelola sub-account dan kirim stream posisi perangkat ke MQTT Broker</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-secondary btn-sm" onClick={fetchUsers} disabled={loading}>
@@ -362,7 +422,25 @@ export default function UsersPage() {
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleSendMqtt(u.account)}
+                          disabled={mqttSending === u.account}
+                          title="Kirim posisi perangkat user ini ke MQTT Broker 36.92.47.218:14583"
+                          style={{
+                            borderColor: 'rgba(0,245,255,0.4)',
+                            color: 'var(--cyan)',
+                            background: 'rgba(0,245,255,0.06)',
+                          }}
+                        >
+                          📡 {mqttSending === u.account ? 'Mengirim...' : 'Kirim MQTT'}
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => openDetail(u)}
+                          title="Lihat detail lengkap"
+                        >👁️ Detail</button>
                         <button
                           className="btn btn-secondary btn-sm"
                           onClick={() => openEdit(u)}
@@ -386,7 +464,7 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* ── Modal ────────────────────────────────────────────────────────────── */}
+      {/* ── Modal User Detail / Edit / Create ────────────────────────────────── */}
       {modal && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1000,
@@ -402,18 +480,25 @@ export default function UsersPage() {
             border: '1px solid rgba(0,245,255,0.18)',
             borderRadius: 'var(--r-xl)',
             padding: 32,
-            width: '100%', maxWidth: 500,
+            width: '100%', maxWidth: (modal as string) === 'detail' ? 640 : 500,
             boxShadow: '0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,245,255,0.05)',
             position: 'relative',
           }}>
-            {/* Modal header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'Orbitron, monospace', letterSpacing: '0.04em' }}>
-                  {modal === 'create' ? '➕ Tambah User Baru' : '✏️ Edit User'}
+                  {(modal as string) === 'detail'
+                    ? '📋 Detail Akun Jimi'
+                    : modal === 'create'
+                    ? '➕ Tambah User Baru'
+                    : '✏️ Edit User'}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'JetBrains Mono' }}>
-                  {modal === 'create' ? 'Buat sub-account baru di bawah akun Anda' : `Mengedit: ${form.account}`}
+                  {(modal as string) === 'detail'
+                    ? `Account ID: ${selectedUser?.account}`
+                    : modal === 'create'
+                    ? 'Buat sub-account baru di bawah akun Anda'
+                    : `Mengedit: ${form.account}`}
                 </div>
               </div>
               <button
@@ -423,11 +508,83 @@ export default function UsersPage() {
               >✕</button>
             </div>
 
-            {/* Cyan divider */}
             <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(0,245,255,0.3), transparent)', marginBottom: 24 }} />
 
+            {(modal as string) === 'detail' && selectedUser ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 12,
+                  background: 'var(--bg-elevated)',
+                  padding: 16,
+                  borderRadius: 'var(--r-lg)',
+                  border: '1px solid var(--bg-border)',
+                }}>
+                  {[
+                    { label: 'account (Account ID)', value: selectedUser.account, mono: true, color: 'var(--cyan)' },
+                    { label: 'name (Nama)', value: selectedUser.name },
+                    { label: 'type (Tipe)', value: selectedUser.type ?? '—', mono: true },
+                    { label: 'displayFlag', value: selectedUser.displayFlag ?? '—', mono: true },
+                    { label: 'userId', value: selectedUser.userId || '—', mono: true },
+                    { label: 'parentId', value: selectedUser.parentId || '—', mono: true },
+                    { label: 'companyName (Perusahaan)', value: selectedUser.companyName || '—' },
+                    { label: 'email', value: selectedUser.email || '—', mono: true },
+                    { label: 'phone (Telepon)', value: selectedUser.phone || '—', mono: true },
+                    { label: 'language (Bahasa)', value: selectedUser.language || '—' },
+                    { label: 'sex (Jenis Kelamin)', value: selectedUser.sex === 1 ? '1 (Laki-laki)' : selectedUser.sex === 2 ? '2 (Perempuan)' : '0 (Tidak Ditentukan)' },
+                    { label: 'enabledFlag (Status)', value: selectedUser.enabledFlag === 1 ? '1 (Aktif)' : '0 (Nonaktif)', badge: true },
+                    { label: 'birth (Tanggal Lahir)', value: selectedUser.birth || '—' },
+                    { label: 'address (Alamat)', value: selectedUser.address || '—' },
+                  ].map(item => (
+                    <div key={item.label}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {item.label}
+                      </div>
+                      <div style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        marginTop: 2,
+                        fontFamily: item.mono ? 'JetBrains Mono, monospace' : 'inherit',
+                        color: item.color || 'var(--text-primary)',
+                      }}>
+                        {item.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* MQTT Integration Action Card inside Detail Modal */}
+                <div style={{
+                  background: 'rgba(0,245,255,0.05)',
+                  border: '1px solid rgba(0,245,255,0.2)',
+                  borderRadius: 'var(--r-md)',
+                  padding: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--cyan)' }}>📡 Broadcast Lokasi Ke MQTT</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>Kirim payload lokasi ke broker 36.92.47.218:14583 di topik fleet/{selectedUser.account}</div>
+                  </div>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleSendMqtt(selectedUser.account)}
+                    disabled={mqttSending === selectedUser.account}
+                  >
+                    {mqttSending === selectedUser.account ? '⏳ Mengirim...' : '🚀 Kirim Ke MQTT'}
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                  <button className="btn btn-secondary" onClick={closeModal}>Tutup</button>
+                </div>
+              </div>
+            ) : (
+
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Account ID — only editable on create */}
               <div className="form-group">
                 <label className="form-label">Account ID *</label>
                 <input
@@ -439,12 +596,8 @@ export default function UsersPage() {
                   required
                   id="input-account-id"
                 />
-                {modal === 'edit' && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Account ID tidak dapat diubah setelah dibuat.</div>
-                )}
               </div>
 
-              {/* Name */}
               <div className="form-group">
                 <label className="form-label">Nama Lengkap *</label>
                 <input
@@ -457,7 +610,6 @@ export default function UsersPage() {
                 />
               </div>
 
-              {/* Password — only on create */}
               {modal === 'create' && (
                 <div className="form-group">
                   <label className="form-label">Password *</label>
@@ -471,11 +623,9 @@ export default function UsersPage() {
                     minLength={6}
                     id="input-password"
                   />
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Password akan di-hash MD5 sebelum dikirim ke API.</div>
                 </div>
               )}
 
-              {/* Email + Phone */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-group">
                   <label className="form-label">Email</label>
@@ -500,7 +650,6 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              {/* Company */}
               <div className="form-group">
                 <label className="form-label">Nama Perusahaan</label>
                 <input
@@ -512,7 +661,6 @@ export default function UsersPage() {
                 />
               </div>
 
-              {/* Actions */}
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" className="btn btn-ghost" onClick={closeModal}>Batal</button>
                 <button type="submit" className="btn btn-primary" disabled={saving} id="btn-submit-user">
@@ -520,6 +668,104 @@ export default function UsersPage() {
                 </button>
               </div>
             </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MQTT Published Payload Inspector Modal ──────────────────────────── */}
+      {mqttResult && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 24,
+        }}
+          onClick={e => { if (e.target === e.currentTarget) setMqttResult(null) }}
+        >
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid rgba(0,245,255,0.3)',
+            borderRadius: 'var(--r-xl)',
+            padding: 32,
+            width: '100%', maxWidth: 700,
+            boxShadow: '0 24px 80px rgba(0,0,0,0.8), 0 0 24px rgba(0,245,255,0.15)',
+            position: 'relative',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'Orbitron, monospace', color: 'var(--cyan)' }}>
+                  📡 MQTT Stream Success
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'JetBrains Mono' }}>
+                  Broker: {mqttResult.broker} | Akun: {mqttResult.account} | Streamed: {mqttResult.publishedCount} Perangkat
+                </div>
+              </div>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setMqttResult(null)}
+                style={{ fontSize: 18, lineHeight: 1, padding: '4px 8px' }}
+              >✕</button>
+            </div>
+
+            <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(0,245,255,0.3), transparent)', marginBottom: 20 }} />
+
+            {/* Topic Badges */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+                Published Topics ({mqttResult.topics?.length || 0}):
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {(mqttResult.topics || []).map((t: string) => (
+                  <span key={t} className="mono" style={{
+                    fontSize: 11, padding: '4px 10px', borderRadius: 'var(--r-md)',
+                    background: 'rgba(0,245,255,0.1)', color: 'var(--cyan)', border: '1px solid rgba(0,245,255,0.25)', fontWeight: 600
+                  }}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Payload Code View */}
+            <div style={{ position: 'relative', marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Payload Data (jimi.device.location.get):
+                </div>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(mqttResult.payloads, null, 2))
+                    setCopyingJson(true)
+                    setTimeout(() => setCopyingJson(false), 2000)
+                  }}
+                  style={{ fontSize: 11, padding: '3px 10px' }}
+                >
+                  {copyingJson ? '✅ Tersalin!' : '📋 Copy JSON'}
+                </button>
+              </div>
+              <pre style={{
+                background: '#070710',
+                border: '1px solid var(--bg-border)',
+                borderRadius: 'var(--r-lg)',
+                padding: 16,
+                fontSize: 12,
+                fontFamily: 'JetBrains Mono, monospace',
+                color: '#00F5FF',
+                maxHeight: 320,
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+              }}>
+                {JSON.stringify(mqttResult.payloads, null, 2)}
+              </pre>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-primary" onClick={() => setMqttResult(null)}>Selesai</button>
+            </div>
           </div>
         </div>
       )}

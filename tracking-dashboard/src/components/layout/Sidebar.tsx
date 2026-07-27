@@ -40,6 +40,7 @@ const navItems: NavGroup[] = [
     section: 'Manajemen',
     items: [
       { href: '/users', iconImg: '/images/user-management-icon.png', label: 'User Management' },
+      { href: '/logs', icon: '📜', label: 'API Logs' },
     ]
   },
 ]

@@ -134,3 +134,49 @@ export function getRecentLogs(limit = 50): LogEntry[] {
     return []
   }
 }
+
+/**
+ * List all available log files in the logs directory
+ */
+export function getAvailableLogFiles(): { name: string; date: string; size: number }[] {
+  if (!fs.existsSync(LOG_DIR)) return []
+  try {
+    const files = fs.readdirSync(LOG_DIR)
+    return files
+      .filter(f => f.startsWith('api-') && f.endsWith('.log'))
+      .map(f => {
+        const filePath = path.join(LOG_DIR, f)
+        const stat = fs.statSync(filePath)
+        const dateMatch = f.match(/api-(\d{4}-\d{2}-\d{2})\.log/)
+        return {
+          name: f,
+          date: dateMatch ? dateMatch[1] : f,
+          size: stat.size,
+        }
+      })
+      .sort((a, b) => b.name.localeCompare(a.name))
+  } catch (err) {
+    console.error('[Logger] Failed to list log files:', err)
+    return []
+  }
+}
+
+/**
+ * Get raw text content of a specific daily log file (defaults to today)
+ */
+export function getRawDailyLog(dateStr?: string): string {
+  const targetDate = dateStr || getDateStr()
+  const fileName = targetDate.endsWith('.log') ? targetDate : `api-${targetDate}.log`
+  const filePath = path.join(LOG_DIR, fileName)
+
+  if (!fs.existsSync(filePath)) {
+    return `Log file ${fileName} not found.`
+  }
+
+  try {
+    return fs.readFileSync(filePath, 'utf-8')
+  } catch (err: any) {
+    return `Failed to read log file: ${err.message}`
+  }
+}
+
