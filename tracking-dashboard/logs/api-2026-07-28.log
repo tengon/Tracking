@@ -1,0 +1,4 @@
+[2026-07-28 07:47:25.572 WIB] [POST] jimi.oauth.token.get | Status: 200 | 222ms
+   ➜ REQ: {"method":"jimi.oauth.token.get","timestamp":"2026-07-28 00:47:25","app_key":"8FB345B8693CCD00023DAE386436CBD0","sign_method":"md5","v":"1.0","format":"json","user_id":"tengon","user_pwd_md5":"8d20...14d1","expires_in":"7200","sign":"EED2...D78B"}
+   ➜ RES: {"code":0,"message":"success","result":{"appKey":"8FB345B8693CCD00023DAE386436CBD0","account":"tengon","accessToken":"e309...545d","refreshToken":"529349beb014ee43f248ba6b17f84607","expiresIn":7200,"time":"2026-07-28 00:47:25","entityAccount":""},"data":null}
+--------------------------------------------------------------------------------

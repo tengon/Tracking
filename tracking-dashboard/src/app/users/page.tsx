@@ -39,6 +39,7 @@ export default function UsersPage() {
   const [mqttSending, setMqttSending] = useState<string | null>(null)
   const [mqttResult, setMqttResult]   = useState<any | null>(null)
   const [copyingJson, setCopyingJson] = useState(false)
+  const [mqttConnected, setMqttConnected] = useState(false)
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchUsers = useCallback(async () => {
@@ -57,6 +58,18 @@ export default function UsersPage() {
   }, [accessToken, myAccount])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
+
+  // ── Fetch MQTT Worker State ─────────────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/mqtt/state')
+      .then(res => res.json())
+      .then(data => {
+        if (typeof data.active === 'boolean') {
+          setMqttConnected(data.active)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   // ── Notify helper ──────────────────────────────────────────────────────────
   const notify = (msg: string, isErr = false) => {
@@ -218,7 +231,9 @@ export default function UsersPage() {
             <div>
               <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 MQTT Broker Location Integration
-                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'rgba(0,255,65,0.15)', color: 'var(--green)', border: '1px solid rgba(0,255,65,0.3)', fontWeight: 800 }}>ACTIVE</span>
+                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: mqttConnected ? 'rgba(0,255,65,0.15)' : 'rgba(255,0,64,0.15)', color: mqttConnected ? 'var(--green)' : 'var(--red)', border: mqttConnected ? '1px solid rgba(0,255,65,0.3)' : '1px solid rgba(255,0,64,0.3)', fontWeight: 800 }}>
+                  {mqttConnected ? 'CONNECTED' : 'DISCONNECTED'}
+                </span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'JetBrains Mono, monospace' }}>
                 Broker: <span style={{ color: 'var(--cyan)', fontWeight: 700 }}>36.92.47.218:14583</span> | Topik: <span style={{ color: 'var(--magenta)' }}>fleet/(imei)</span> | Interval: <span style={{ color: 'var(--yellow)' }}>10s</span>
@@ -226,21 +241,51 @@ export default function UsersPage() {
             </div>
           </div>
 
-          <button
-            className="btn btn-primary"
-            onClick={() => handleSendMqtt(myAccount || 'tengon')}
-            disabled={mqttSending === (myAccount || 'tengon')}
-            style={{
-              padding: '10px 18px',
-              fontSize: 13,
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #00F5FF 0%, #0077FF 100%)',
-              color: '#000',
-              boxShadow: '0 0 16px rgba(0,245,255,0.3)',
-            }}
-          >
-            {mqttSending === (myAccount || 'tengon') ? '⏳ Broadcast Ke MQTT...' : '🚀 Kirim Semua User Ke MQTT'}
-          </button>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                const newState = !mqttConnected
+                setMqttConnected(newState)
+                try {
+                  await fetch('/api/mqtt/state', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ active: newState })
+                  })
+                } catch {
+                  setMqttConnected(!newState)
+                  notify('Gagal mengubah status MQTT Worker', true)
+                }
+              }}
+              style={{
+                padding: '10px 18px',
+                fontSize: 13,
+                fontWeight: 700,
+                background: mqttConnected ? 'rgba(255,0,64,0.1)' : 'rgba(0,255,65,0.1)',
+                color: mqttConnected ? 'var(--red)' : 'var(--green)',
+                border: `1px solid ${mqttConnected ? 'rgba(255,0,64,0.3)' : 'rgba(0,255,65,0.3)'}`,
+              }}
+            >
+              {mqttConnected ? '🔌 Disconnect' : '🔌 Connect'}
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => handleSendMqtt(myAccount || 'tengon')}
+              disabled={!mqttConnected || mqttSending === (myAccount || 'tengon')}
+              style={{
+                padding: '10px 18px',
+                fontSize: 13,
+                fontWeight: 700,
+                background: !mqttConnected ? 'var(--bg-elevated)' : 'linear-gradient(135deg, #00F5FF 0%, #0077FF 100%)',
+                color: !mqttConnected ? 'var(--text-muted)' : '#000',
+                boxShadow: !mqttConnected ? 'none' : '0 0 16px rgba(0,245,255,0.3)',
+                borderColor: !mqttConnected ? 'var(--bg-border)' : 'transparent',
+              }}
+            >
+              {mqttSending === (myAccount || 'tengon') ? '⏳ Broadcast Ke MQTT...' : '🚀 Kirim Semua User Ke MQTT'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -426,12 +471,12 @@ export default function UsersPage() {
                         <button
                           className="btn btn-secondary btn-sm"
                           onClick={() => handleSendMqtt(u.account)}
-                          disabled={mqttSending === u.account}
-                          title="Kirim posisi perangkat user ini ke MQTT Broker 36.92.47.218:14583"
+                          disabled={!mqttConnected || mqttSending === u.account}
+                          title={!mqttConnected ? "Harap connect ke MQTT Broker terlebih dahulu" : "Kirim posisi perangkat user ini ke MQTT Broker 36.92.47.218:14583"}
                           style={{
-                            borderColor: 'rgba(0,245,255,0.4)',
-                            color: 'var(--cyan)',
-                            background: 'rgba(0,245,255,0.06)',
+                            borderColor: !mqttConnected ? 'var(--bg-border)' : 'rgba(0,245,255,0.4)',
+                            color: !mqttConnected ? 'var(--text-muted)' : 'var(--cyan)',
+                            background: !mqttConnected ? 'transparent' : 'rgba(0,245,255,0.06)',
                           }}
                         >
                           📡 {mqttSending === u.account ? 'Mengirim...' : 'Kirim MQTT'}
@@ -572,7 +617,7 @@ export default function UsersPage() {
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={() => handleSendMqtt(selectedUser.account)}
-                    disabled={mqttSending === selectedUser.account}
+                    disabled={!mqttConnected || mqttSending === selectedUser.account}
                   >
                     {mqttSending === selectedUser.account ? '⏳ Mengirim...' : '🚀 Kirim Ke MQTT'}
                   </button>

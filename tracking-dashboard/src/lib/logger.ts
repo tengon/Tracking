@@ -52,12 +52,15 @@ function getDateStr(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-// Get timestamp ISO-like local string: YYYY-MM-DD HH:mm:ss.SSS
+// Get timestamp synced to Indonesia Time (WIB / UTC+7): YYYY-MM-DD HH:mm:ss.SSS
 function getTimestamp(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const ms = String(d.getMilliseconds()).padStart(3, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${ms}`
+  const now = new Date()
+  // Offset to WIB (UTC+7)
+  const wib = new Date(now.getTime() + 7 * 3600000)
+  
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
+  return `${wib.getUTCFullYear()}-${pad(wib.getUTCMonth()+1)}-${pad(wib.getUTCDate())} ` +
+         `${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())}.${pad(now.getUTCMilliseconds(), 3)} WIB`
 }
 
 /**

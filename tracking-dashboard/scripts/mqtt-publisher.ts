@@ -31,6 +31,17 @@ const TOKEN_RENEW_INTERVAL_MS = 6000 * 1000 // 6000 seconds (100 minutes)
 let accessToken: string | null = null
 let activeImeis: string[] = []
 
+const STATE_FILE = path.join(process.cwd(), 'logs', 'mqtt-state.json')
+function isWorkerActive(): boolean {
+  try {
+    if (fs.existsSync(STATE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'))
+      return !!data.active
+    }
+  } catch {}
+  return false
+}
+
 async function main() {
   let mqtt: any
   try {
@@ -42,6 +53,7 @@ async function main() {
   }
 
   const { getToken, getDeviceList, getDeviceLocation, getAllDeviceLocations, getChildAccounts } = await import('../src/lib/api/tracksolid')
+  const { upsertAccount } = await import('../src/lib/db/postgres')
 
   const primaryAccount = process.env.JIMI_ACCOUNT || '754269'
   const passwordMd5 = process.env.JIMI_PASSWORD_MD5 || ''
@@ -51,11 +63,17 @@ async function main() {
     process.exit(1)
   }
 
-  console.log(`[MQTT Service] Connecting to MQTT broker at ${MQTT_BROKER}...`)
+  console.log(`[MQTT Service] Configured MQTT broker: ${MQTT_BROKER}`)
   const client = mqtt.connect(MQTT_BROKER, {
     reconnectPeriod: 5000,
     connectTimeout: 10000,
+    manualConnect: true, // We will connect manually when active
   })
+
+  // Start disconnected if not active
+  if (isWorkerActive()) {
+    client.connect()
+  }
 
   client.on('connect', () => {
     console.log(`[MQTT Service] Successfully connected to MQTT Broker: ${MQTT_BROKER}`)
@@ -103,7 +121,7 @@ async function main() {
 
   // ─── Fetch IMEIs associated with Jimi Root Account & Sub-accounts ───────────
   async function refreshDeviceList() {
-    if (!accessToken) return
+    if (!accessToken || !isWorkerActive()) return
     const allImeis: string[] = []
     const rootAccounts = Array.from(new Set(['tengon', primaryAccount]))
 
@@ -123,6 +141,36 @@ async function main() {
         const childRes = await getChildAccounts(accessToken, rootAcc)
         const children = (childRes as any)?.result || []
         const childAccs = (Array.isArray(children) ? children : []).map((c: any) => c.account).filter(Boolean)
+
+        // Sync discovered sub-accounts to the local database
+        if (Array.isArray(children)) {
+          for (const child of children) {
+            if (!child.account) continue
+            try {
+              await upsertAccount({
+                account: child.account,
+                parent_account: rootAcc,
+                name: child.name,
+                company_name: child.companyName,
+                email: child.email,
+                phone: child.phone,
+                type: child.type,
+                display_flag: child.displayFlag,
+                address: child.address,
+                birth: child.birth,
+                language: child.language,
+                sex: child.sex,
+                enabled_flag: child.enabledFlag,
+                remark: child.remark,
+                user_id: child.userId,
+                parent_id: child.parentId,
+                raw_detail: child,
+              })
+            } catch (err: any) {
+              console.warn(`[MQTT Service] DB sync failed for account "${child.account}":`, err?.message || err)
+            }
+          }
+        }
 
         for (const childAcc of [rootAcc, ...childAccs]) {
           try {
@@ -151,7 +199,24 @@ async function main() {
   setInterval(refreshDeviceList, 5 * 60 * 1000)
 
   // ─── 10-Second Location Polling & MQTT Publishing ───────────────────────────
+  let wasActive = isWorkerActive()
+
   async function pollAndPublishLocations() {
+    const active = isWorkerActive()
+    
+    // Handle state transitions
+    if (active && !wasActive) {
+      console.log('[MQTT Service] Worker activated by UI. Connecting to MQTT and fetching devices...')
+      client.connect()
+      await refreshDeviceList()
+    } else if (!active && wasActive) {
+      console.log('[MQTT Service] Worker deactivated by UI. Disconnecting MQTT and stopping polling.')
+      client.end(true)
+    }
+    wasActive = active
+
+    if (!active) return
+
     if (!accessToken) {
       console.warn('[MQTT Service] Skipping poll: Access token not available.')
       return
@@ -191,7 +256,14 @@ async function main() {
         }
       }
 
-      console.log(`[MQTT Service] [${new Date().toISOString()}] Published ${publishedCount} device location payload(s) to topic "fleet/(imei)"`)
+      // Sync to Indonesia time (WIB / UTC+7)
+      const now = new Date()
+      const wib = new Date(now.getTime() + 7 * 3600000)
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const wibString = `${wib.getUTCFullYear()}-${pad(wib.getUTCMonth()+1)}-${pad(wib.getUTCDate())} ` +
+                        `${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())} WIB`
+
+      console.log(`[MQTT Service] [${wibString}] Published ${publishedCount} device location payload(s) to topic "fleet/(imei)"`)
     } catch (err: any) {
       console.error('[MQTT Service] Error querying jimi.device.location.get:', err?.message || err)
     }

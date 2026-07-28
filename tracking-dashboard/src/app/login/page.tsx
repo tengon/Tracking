@@ -57,7 +57,7 @@ export default function LoginPage() {
       <div style={{ width: '100%', maxWidth: 420, position: 'relative', zIndex: 1 }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <img src="/images/bit320.png" alt="Tracking Aja Logo" style={{ width: 100, height: 'auto', margin: '0 auto 16px', display: 'block' }} />
+          <img src="/images/login-icon.png" alt="Tracking Aja Logo" style={{ width: 100, height: 'auto', margin: '0 auto 16px', display: 'block', borderRadius: '10px' }} />
           <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 6 }}>Tracking Aja</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Fleet Management Dashboard</p>
 
@@ -80,7 +80,7 @@ export default function LoginPage() {
                 id="username"
                 className="form-input"
                 type="text"
-                placeholder="Enter your TrackSolid account"
+                placeholder="Enter your account"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 required
